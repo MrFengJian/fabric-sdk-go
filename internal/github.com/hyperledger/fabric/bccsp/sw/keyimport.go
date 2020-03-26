@@ -139,6 +139,31 @@ func (*rsaGoPublicKeyImportOptsKeyImporter) KeyImport(raw interface{}, opts bccs
 	return &rsaPublicKey{lowLevelKey}, nil
 }
 
+type rsaPrivatekeyImportOptsKeyImporter struct {
+}
+
+func (*rsaPrivatekeyImportOptsKeyImporter) KeyImport(raw interface{}, opts bccsp.KeyImportOpts) (bccsp.Key, error) {
+	der, ok := raw.([]byte)
+	if !ok {
+		return nil, errors.New("[RSA2048PrivateKeyImportOpts] Invalid raw material. Expected byte array.")
+	}
+
+	if len(der) == 0 {
+		return nil, errors.New("[RSA2048PrivateKeyImportOpts] Invalid raw. It must not be nil.")
+	}
+
+	lowLevelKey, err := utils.DERToPrivateKey(der)
+	if err != nil {
+		return nil, fmt.Errorf("Failed converting PKIX to rsa public key [%s]", err)
+	}
+
+	rsaSK, ok := lowLevelKey.(*rsa.PrivateKey)
+	if !ok {
+		return nil, errors.New("Failed casting to rsa private key. Invalid raw material.")
+	}
+	return &rsaPrivateKey{rsaSK}, nil
+}
+
 type x509PublicKeyImportOptsKeyImporter struct {
 	bccsp *CSP
 }

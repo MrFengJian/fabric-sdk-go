@@ -77,6 +77,16 @@ type EnrollmentRequest struct {
 	// The type of the enrollment request: x509 or idemix
 	// The default is a request for an X509 enrollment certificate
 	Type string
+	CSR  *CSRRequest
+}
+
+type CSRRequest struct {
+	KeyRequest *KeyRequest
+}
+
+type KeyRequest struct {
+	Algorithm string
+	Size      int
 }
 
 // ReenrollmentRequest is a request to reenroll an identity.
@@ -91,6 +101,7 @@ type ReenrollmentRequest struct {
 	// AttrReqs are requests for attributes to add to the certificate.
 	// Each attribute is added only if the requestor owns the attribute.
 	AttrReqs []*AttributeRequest
+	CSR      *CSRRequest
 }
 
 // Attribute defines additional attributes that may be passed along during registration

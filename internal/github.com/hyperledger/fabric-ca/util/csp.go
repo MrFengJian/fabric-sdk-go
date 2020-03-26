@@ -177,7 +177,16 @@ func ImportBCCSPKeyFromPEMBytes(keyBuff []byte, myCSP core.CryptoSuite, temporar
 		}
 		return sk, nil
 	case *rsa.PrivateKey:
-		return nil, errors.Errorf("Failed to import RSA key from %s; RSA private key import is not supported", keyFile)
+		priv, err := factory.RsaPrivateKeyToDer(key.(*rsa.PrivateKey))
+		if err != nil {
+			return nil, errors.WithMessage(err, fmt.Sprintf("failed to convert rsa private for '%s'", keyFile))
+		}
+		sk, err := myCSP.KeyImport(priv, factory.GetRSAPrivateKeyImportOpts(temporary))
+		if err != nil {
+			return nil, errors.WithMessage(err, fmt.Sprintf("Failed to import rsa private key for '%s'", keyFile))
+		}
+		return sk, nil
+		//return nil, errors.Errorf("Failed to import RSA key from %s; RSA private key import is not supported", keyFile)
 	default:
 		return nil, errors.Errorf("Failed to import key from %s: invalid secret key type", keyFile)
 	}

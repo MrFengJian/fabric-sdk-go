@@ -293,6 +293,22 @@ func (opts *RSAKeyGenOpts) Ephemeral() bool {
 	return opts.Temporary
 }
 
+// RSA2048PrivateKeyImportOpts contains options for RSA2048 secret key importation in DER format
+type RSA2048PrivateKeyImportOpts struct {
+	Temporary bool
+}
+
+// Algorithm returns the key importation algorithm identifier (to be used).
+func (opts *RSA2048PrivateKeyImportOpts) Algorithm() string {
+	return RSA2048
+}
+
+// Ephemeral returns true if the key to generate has to be ephemeral,
+// false otherwise.
+func (opts *RSA2048PrivateKeyImportOpts) Ephemeral() bool {
+	return opts.Temporary
+}
+
 // ECDSAGoPublicKeyImportOpts contains options for RSA key importation from rsa.PublicKey
 type RSAGoPublicKeyImportOpts struct {
 	Temporary bool
