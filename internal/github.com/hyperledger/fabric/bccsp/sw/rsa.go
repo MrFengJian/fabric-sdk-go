@@ -21,9 +21,9 @@ Please review third_party pinning scripts and patches for more details.
 package sw
 
 import (
+	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
-	"errors"
 	"fmt"
 
 	"github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/bccsp"
@@ -33,7 +33,7 @@ type rsaSigner struct{}
 
 func (s *rsaSigner) Sign(k bccsp.Key, digest []byte, opts bccsp.SignerOpts) ([]byte, error) {
 	if opts == nil {
-		return nil, errors.New("Invalid options. Must be different from nil.")
+		opts = &rsa.PSSOptions{SaltLength: rsa.PSSSaltLengthEqualsHash, Hash: crypto.SHA256}
 	}
 
 	return k.(*rsaPrivateKey).privKey.Sign(rand.Reader, digest, opts)
@@ -43,7 +43,7 @@ type rsaPrivateKeyVerifier struct{}
 
 func (v *rsaPrivateKeyVerifier) Verify(k bccsp.Key, signature, digest []byte, opts bccsp.SignerOpts) (bool, error) {
 	if opts == nil {
-		return false, errors.New("Invalid options. It must not be nil.")
+		opts = &rsa.PSSOptions{SaltLength: rsa.PSSSaltLengthEqualsHash, Hash: crypto.SHA256}
 	}
 	switch opts.(type) {
 	case *rsa.PSSOptions:
@@ -61,7 +61,7 @@ type rsaPublicKeyKeyVerifier struct{}
 
 func (v *rsaPublicKeyKeyVerifier) Verify(k bccsp.Key, signature, digest []byte, opts bccsp.SignerOpts) (bool, error) {
 	if opts == nil {
-		return false, errors.New("Invalid options. It must not be nil.")
+		opts = &rsa.PSSOptions{SaltLength: rsa.PSSSaltLengthEqualsHash, Hash: crypto.SHA256}
 	}
 	switch opts.(type) {
 	case *rsa.PSSOptions:

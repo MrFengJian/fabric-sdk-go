@@ -13,6 +13,7 @@ package cryptosuitebridge
 import (
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/rsa"
 
 	"github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/bccsp"
 	cspsigner "github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/bccsp/signer"
@@ -60,6 +61,10 @@ func PEMtoPrivateKey(raw []byte, pwd []byte) (interface{}, error) {
 // PrivateKeyToDER marshals is bridge for utils.PrivateKeyToDER
 func PrivateKeyToDER(privateKey *ecdsa.PrivateKey) ([]byte, error) {
 	return utils.PrivateKeyToDER(privateKey)
+}
+
+func RsaPrivateKeyToDer(privatekey *rsa.PrivateKey) ([]byte, error) {
+	return utils.RsaPrivateKeyToDER(privatekey)
 }
 
 //GetDefault returns default cryptosuite from bccsp factory default
@@ -116,4 +121,9 @@ func GetX509PublicKeyImportOpts(ephemeral bool) core.KeyImportOpts {
 // or PKCS#8 format.
 func GetECDSAPrivateKeyImportOpts(ephemeral bool) core.KeyImportOpts {
 	return &bccsp.ECDSAPrivateKeyImportOpts{Temporary: ephemeral}
+}
+
+//GetRSAPrivateKeyImportOpts options for rsa secret key importation in DER format
+func GetRSAPrivateKeyImportOpts(ephemeral bool) core.KeyImportOpts {
+	return &bccsp.RSA2048PrivateKeyImportOpts{Temporary: ephemeral}
 }

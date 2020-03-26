@@ -58,6 +58,13 @@ func (c *fabricCAAdapter) Enroll(request *api.EnrollmentRequest) ([]byte, error)
 		Label:   request.Label,
 	}
 
+	if request.CSR != nil && request.CSR.KeyRequest != nil {
+		careq.CSR = new(caapi.CSRInfo)
+		careq.CSR.KeyRequest = new(caapi.BasicKeyRequest)
+		careq.CSR.KeyRequest.Algo = request.CSR.KeyRequest.Algorithm
+		careq.CSR.KeyRequest.Size = request.CSR.KeyRequest.Size
+	}
+
 	if len(request.AttrReqs) > 0 {
 		attrs := make([]*caapi.AttributeRequest, len(request.AttrReqs))
 		for i, a := range request.AttrReqs {
@@ -83,6 +90,14 @@ func (c *fabricCAAdapter) Reenroll(key core.Key, cert []byte, request *api.Reenr
 		Profile: request.Profile,
 		Label:   request.Label,
 	}
+
+	if request.CSR != nil && request.CSR.KeyRequest != nil {
+		careq.CSR = new(caapi.CSRInfo)
+		careq.CSR.KeyRequest = new(caapi.BasicKeyRequest)
+		careq.CSR.KeyRequest.Algo = request.CSR.KeyRequest.Algorithm
+		careq.CSR.KeyRequest.Size = request.CSR.KeyRequest.Size
+	}
+
 	if len(request.AttrReqs) > 0 {
 		attrs := make([]*caapi.AttributeRequest, len(request.AttrReqs))
 		for i, a := range request.AttrReqs {
