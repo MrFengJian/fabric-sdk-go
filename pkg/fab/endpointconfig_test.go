@@ -12,6 +12,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -33,22 +34,23 @@ import (
 )
 
 const (
-	org2                             = "org2"
-	org1                             = "org1"
-	configTestFilePath               = "../core/config/testdata/config_test.yaml"
-	certPath                         = "${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/pkg/core/config/testdata/certs/client_sdk_go.pem"
-	keyPath                          = "${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/pkg/core/config/testdata/certs/client_sdk_go-key.pem"
-	configPemTestFilePath            = "../core/config/testdata/config_test_pem.yaml"
-	configEmbeddedUsersTestFilePath  = "../core/config/testdata/config_test_embedded_pems.yaml"
-	configTestEntityMatchersFilePath = "../core/config/testdata/config_test_entity_matchers.yaml"
-	configType                       = "yaml"
-	orgChannelID                     = "orgchannel"
+	org2                         = "org2"
+	org1                         = "org1"
+	configTestFile               = "config_test.yaml"
+	certPath                     = "${FABRIC_SDK_GO_PROJECT_PATH}/pkg/core/config/testdata/certs/client_sdk_go.pem"
+	keyPath                      = "${FABRIC_SDK_GO_PROJECT_PATH}/pkg/core/config/testdata/certs/client_sdk_go-key.pem"
+	configPemTestFile            = "config_test_pem.yaml"
+	configEmbeddedUsersTestFile  = "config_test_embedded_pems.yaml"
+	configTestEntityMatchersFile = "config_test_entity_matchers.yaml"
+	configType                   = "yaml"
+	orgChannelID                 = "orgchannel"
 )
 
 var configBackend core.ConfigBackend
 
 func TestMain(m *testing.M) {
-	cfgBackend, err := config.FromFile(configTestFilePath)()
+	configPath := filepath.Join(getConfigPath(), configTestFile)
+	cfgBackend, err := config.FromFile(configPath)()
 	if err != nil {
 		panic(fmt.Sprintf("Unexpected error reading config: %s", err))
 	}
@@ -110,8 +112,8 @@ func TestCAConfigFailsByNetworkConfig(t *testing.T) {
 		t.Fatalf("failed to reset network config, cause:%s", err)
 	}
 	//Testing OrdererConfig failure scenario
-	oConfig, ok := sampleEndpointConfig.OrdererConfig("peerorg1")
-	if oConfig != nil || ok {
+	oConfig, ok, ignoreOrderer := sampleEndpointConfig.OrdererConfig("peerorg1")
+	if oConfig != nil || ok || ignoreOrderer {
 		t.Fatal("Testing get OrdererConfig supposed to fail")
 	}
 
@@ -321,7 +323,7 @@ func TestOrdererConfig(t *testing.T) {
 		t.Fatal("Failed to get endpoint config from backend")
 	}
 
-	oConfig, _ := endpointConfig.OrdererConfig("invalid")
+	oConfig, _, _ := endpointConfig.OrdererConfig("invalid")
 	if oConfig != nil {
 		t.Fatal("Testing non-existing OrdererConfig failed")
 	}
@@ -390,11 +392,13 @@ func testCommonConfigOrderer(t *testing.T, expectedConfigHost string, fetchedCon
 		t.Fatal("Failed to get endpoint config from backend")
 	}
 
-	expectedConfig, ok := endpointConfig.OrdererConfig(expectedConfigHost)
+	expectedConfig, ok, ignoreOrderer := endpointConfig.OrdererConfig(expectedConfigHost)
 	assert.True(t, ok)
+	assert.False(t, ignoreOrderer)
 
-	fetchedConfig, ok = endpointConfig.OrdererConfig(fetchedConfigHost)
+	fetchedConfig, ok, ignoreOrderer = endpointConfig.OrdererConfig(fetchedConfigHost)
 	assert.True(t, ok)
+	assert.False(t, ignoreOrderer)
 
 	if expectedConfig.URL == "" {
 		t.Fatal("Url value for the host is empty")
@@ -634,7 +638,8 @@ func TestSystemCertPoolDisabled(t *testing.T) {
 
 func TestInitConfigFromRawWithPem(t *testing.T) {
 	// get a config byte for testing
-	cBytes, err := loadConfigBytesFromFile(t, configPemTestFilePath)
+	configPath := filepath.Join(getConfigPath(), configPemTestFile)
+	cBytes, err := loadConfigBytesFromFile(t, configPath)
 	if err != nil {
 		t.Fatalf("Failed to load sample bytes from File. Error: %s", err)
 	}
@@ -753,7 +758,8 @@ func loadConfigBytesFromFile(t *testing.T, filePath string) ([]byte, error) {
 
 func TestLoadConfigWithEmbeddedUsersWithPems(t *testing.T) {
 	// get a config file with embedded users
-	configBackend1, err := config.FromFile(configEmbeddedUsersTestFilePath)()
+	configPath := filepath.Join(getConfigPath(), configEmbeddedUsersTestFile)
+	configBackend1, err := config.FromFile(configPath)()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -778,7 +784,8 @@ func TestLoadConfigWithEmbeddedUsersWithPems(t *testing.T) {
 
 func TestLoadConfigWithEmbeddedUsersWithPaths(t *testing.T) {
 	// get a config file with embedded users
-	configBackend1, err := config.FromFile(configEmbeddedUsersTestFilePath)()
+	configPath := filepath.Join(getConfigPath(), configEmbeddedUsersTestFile)
+	configBackend1, err := config.FromFile(configPath)()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -804,7 +811,8 @@ func TestLoadConfigWithEmbeddedUsersWithPaths(t *testing.T) {
 
 func TestInitConfigFromRawWrongType(t *testing.T) {
 	// get a config byte for testing
-	cBytes, err := loadConfigBytesFromFile(t, configPemTestFilePath)
+	configPath := filepath.Join(getConfigPath(), configPemTestFile)
+	cBytes, err := loadConfigBytesFromFile(t, configPath)
 	if err != nil {
 		t.Fatalf("Failed to load sample bytes from File. Error: %s", err)
 	}
@@ -852,8 +860,8 @@ func TestTLSClientCertsFromFilesIncorrectPaths(t *testing.T) {
 	testlookup.UnmarshalKey("client", &configEntity.Client)
 
 	//Set client tls paths to empty strings
-	configEntity.Client.TLSCerts.Client.Cert.Path = "/pkg/config/testdata/certs/client_sdk_go.pem"
-	configEntity.Client.TLSCerts.Client.Key.Path = "/pkg/config/testdata/certs/client_sdk_go-key.pem"
+	configEntity.Client.TLSCerts.Client.Cert.Path = filepath.Clean("/pkg/config/testdata/certs/client_sdk_go.pem")
+	configEntity.Client.TLSCerts.Client.Key.Path = filepath.Clean("/pkg/config/testdata/certs/client_sdk_go-key.pem")
 	configEntity.Client.TLSCerts.Client.Cert.Pem = ""
 	configEntity.Client.TLSCerts.Client.Key.Pem = ""
 
@@ -989,8 +997,8 @@ func TestTLSClientCertsPemBeforeFiles(t *testing.T) {
 
 	clientTLSOverride := endpoint.MutualTLSConfig{}
 	// files have incorrect paths, but pems are loaded first
-	clientTLSOverride.Client.Cert.Path = "/pkg/config/testdata/certs/client_sdk_go.pem"
-	clientTLSOverride.Client.Key.Path = "/pkg/config/testdata/certs/client_sdk_go-key.pem"
+	clientTLSOverride.Client.Cert.Path = filepath.Clean("/pkg/config/testdata/certs/client_sdk_go.pem")
+	clientTLSOverride.Client.Key.Path = filepath.Clean("/pkg/config/testdata/certs/client_sdk_go-key.pem")
 
 	clientTLSOverride.Client.Cert.Pem = `-----BEGIN CERTIFICATE-----
 MIIC5TCCAkagAwIBAgIUMYhiY5MS3jEmQ7Fz4X/e1Dx33J0wCgYIKoZIzj0EAwQw
@@ -1132,7 +1140,8 @@ func TestPeerChannelConfig(t *testing.T) {
 
 func TestEndpointConfigWithMultipleBackends(t *testing.T) {
 
-	sampleViper := newViper(configTestEntityMatchersFilePath)
+	configPath := filepath.Join(getConfigPath(), configTestEntityMatchersFile)
+	sampleViper := newViper(configPath)
 
 	var backends []core.ConfigBackend
 	backendMap := make(map[string]interface{})
@@ -1183,12 +1192,14 @@ func TestEndpointConfigWithMultipleBackends(t *testing.T) {
 	assert.Equal(t, networkConfig.Organizations["org1"].MSPID, "Org1MSP")
 
 	//Orderer
-	assert.Equal(t, len(networkConfig.Orderers), 1)
+	assert.Equal(t, len(networkConfig.Orderers), 2)
 	assert.Equal(t, networkConfig.Orderers["local.orderer.example.com"].URL, "orderer.example.com:7050")
+	assert.Equal(t, networkConfig.Orderers["orderer1.example.com"].URL, "orderer1.example.com:7050")
 
 	//Peer
-	assert.Equal(t, len(networkConfig.Peers), 2)
+	assert.Equal(t, len(networkConfig.Peers), 3)
 	assert.Equal(t, networkConfig.Peers["local.peer0.org1.example.com"].URL, "peer0.org1.example.com:7051")
+	assert.Equal(t, networkConfig.Peers["peer0.org3.example.com"].URL, "peer0.org3.example.com:7051")
 
 	//EntityMatchers
 	endpointConfigImpl := endpointConfig.(*EndpointConfig)
@@ -1206,7 +1217,8 @@ func TestEndpointConfigWithMultipleBackends(t *testing.T) {
 
 func TestCAConfig(t *testing.T) {
 	//Test config
-	backend, err := config.FromFile(configTestFilePath)()
+	configPath := filepath.Join(getConfigPath(), configTestFile)
+	backend, err := config.FromFile(configPath)()
 	if err != nil {
 		t.Fatal("Failed to get config backend")
 	}
@@ -1294,7 +1306,8 @@ func tamperPeerChannelConfig(backend *mocks.MockConfigBackend) {
 }
 
 func getMatcherConfig() core.ConfigBackend {
-	cfgBackend, err := config.FromFile(configTestEntityMatchersFilePath)()
+	configPath := filepath.Join(getConfigPath(), configTestEntityMatchersFile)
+	cfgBackend, err := config.FromFile(configPath)()
 	if err != nil {
 		panic(fmt.Sprintf("Unexpected error reading config: %s", err))
 	}
@@ -1363,8 +1376,9 @@ func TestEntityMatchers(t *testing.T) {
 	assert.True(t, ok, "supposed to find peer config")
 	assert.NotNil(t, peerConfig, "supposed to find peer config")
 
-	ordererConfig, ok := endpointConfig.OrdererConfig("xyz.org1.example.com")
+	ordererConfig, ok, ignoreOrderer := endpointConfig.OrdererConfig("xyz.org1.example.com")
 	assert.True(t, ok, "supposed to find orderer config")
+	assert.False(t, ignoreOrderer, "supposed to not ignore orderer")
 	assert.NotNil(t, ordererConfig, "supposed to find orderer config")
 
 	channelConfig := endpointConfig.ChannelConfig("samplexyzchannel")
@@ -1403,8 +1417,9 @@ func TestDefaultGRPCOpts(t *testing.T) {
 	_, ok = peerConfig.GRPCOptions["allow-insecure"]
 	assert.True(t, ok)
 
-	ordererConfig, ok := endpointConfig.OrdererConfig("xyz.org1.example.com")
+	ordererConfig, ok, ignoreOrderer := endpointConfig.OrdererConfig("xyz.org1.example.com")
 	assert.True(t, ok, "supposed to find orderer config")
+	assert.False(t, ignoreOrderer)
 	assert.NotNil(t, ordererConfig, "supposed to find orderer config")
 	assert.NotEmpty(t, ordererConfig.GRPCOptions)
 	assert.Equal(t, 6, len(ordererConfig.GRPCOptions))

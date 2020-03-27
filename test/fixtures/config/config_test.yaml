@@ -66,7 +66,7 @@ client:
 
   # Root of the MSP directories with keys and certs.
   cryptoconfig:
-    path: ${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/${CRYPTOCONFIG_FIXTURES_PATH}
+    path: ${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}
 
   # Some SDKs support pluggable KV stores, the properties under "credentialStore"
   # are implementation specific
@@ -81,7 +81,7 @@ client:
       # Specific to the underlying KeyValueStore that backs the crypto key store.
       path: /tmp/msp
 
-   # BCCSP config for the client. Used by GO SDK.
+  # [Optional] BCCSP config for the client. Used by GO SDK.
   BCCSP:
     security:
      enabled: true
@@ -98,9 +98,9 @@ client:
     # [Optional]. Client key and cert for TLS handshake with peers and orderers
     client:
       key:
-        path: ${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.key
+        path: ${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.key
       cert:
-        path: ${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.crt
+        path: ${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.crt
 
 #
 # [Optional]. But most apps would have this section so that channel objects can be constructed
@@ -112,7 +112,7 @@ channels:
   # Default channel is used if channel configuration is missing or if defined channel configuration is missing info
   # If channel doesn't define peers then peers from default channel will be used
   # If channel doesn't define orderes then orderes from default channel will be used
-  # If channel doesn't define policies then policies from default channel will be used. 
+  # If channel doesn't define policies then policies from default channel will be used.
   # Also, if channel defines policies and some policy info is missing than that missing info will be filled from default channel.
   _default:
 
@@ -183,7 +183,7 @@ channels:
           maxBackoff: 5s
           #[Optional] he factor by which the initial back off period is exponentially incremented
           backoffFactor: 2.0
-          
+
       #[Optional] options for the event service
       eventService:
         # [Optional] resolverStrategy specifies the peer resolver strategy to use when connecting to a peer
@@ -281,6 +281,7 @@ organizations:
     # Fabric-CA servers.
     certificateAuthorities:
       - ca.org1.example.com
+      - tlsca.org1.example.com
 
   # the profile will contain public information about organizations other than the one it belongs to.
   # These are necessary information to make transaction lifecycles work, including MSP IDs and
@@ -331,6 +332,7 @@ orderers:
       allow-insecure: false
 
   orderer.example.com:
+    # [Optional] Default: Infer from hostname
     url: orderer.example.com:7050
 
     # these are standard properties defined by the gRPC library
@@ -349,7 +351,7 @@ orderers:
 
     tlsCACerts:
       # Certificate location absolute path
-      path: ${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/${CRYPTOCONFIG_FIXTURES_PATH}/ordererOrganizations/example.com/tlsca/tlsca.example.com-cert.pem
+      path: ${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/ordererOrganizations/example.com/tlsca/tlsca.example.com-cert.pem
 
 #
 # List of peers to send various requests to, including endorsement, query
@@ -371,6 +373,7 @@ peers:
 
   peer0.org1.example.com:
     # this URL is used to send endorsement and query requests
+    # [Optional] Default: Infer from hostname
     url: peer0.org1.example.com:7051
 
     #grpcOptions:
@@ -378,7 +381,7 @@ peers:
 
     tlsCACerts:
       # Certificate location absolute path
-      path: ${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/org1.example.com/tlsca/tlsca.org1.example.com-cert.pem
+      path: ${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/org1.example.com/tlsca/tlsca.org1.example.com-cert.pem
 
   peer1.org1.example.com:
     # this URL is used to send endorsement and query requests
@@ -389,7 +392,7 @@ peers:
 
     tlsCACerts:
       # Certificate location absolute path
-      path: ${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/org1.example.com/tlsca/tlsca.org1.example.com-cert.pem
+      path: ${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/org1.example.com/tlsca/tlsca.org1.example.com-cert.pem
 
   peer0.org2.example.com:
     url: peer0.org2.example.com:8051
@@ -397,7 +400,7 @@ peers:
     #  ssl-target-name-override: peer0.org2.example.com
 
     tlsCACerts:
-      path: ${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/org2.example.com/tlsca/tlsca.org2.example.com-cert.pem
+      path: ${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/org2.example.com/tlsca/tlsca.org2.example.com-cert.pem
 
   peer1.org2.example.com:
     url: peer1.org2.example.com:9051
@@ -405,7 +408,7 @@ peers:
     #  ssl-target-name-override: peer1.org2.example.com
 
     tlsCACerts:
-      path: ${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/org2.example.com/tlsca/tlsca.org2.example.com-cert.pem
+      path: ${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/org2.example.com/tlsca/tlsca.org2.example.com-cert.pem
 
 #
 # Fabric-CA is a special kind of Certificate Authority provided by Hyperledger Fabric which allows
@@ -414,19 +417,20 @@ peers:
 #
 certificateAuthorities:
   ca.org1.example.com:
+    # [Optional] Default: Infer from hostname
     url: https://ca.org1.example.com:7054
     # [Optional] The optional server name for target override
     #grpcOptions:
     #  ssl-target-name-override: ca.org1.example.com
     tlsCACerts:
       # Comma-Separated list of paths
-      path: ${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/org1.example.com/tlsca/tlsca.org1.example.com-cert.pem
+      path: ${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/org1.example.com/tlsca/tlsca.org1.example.com-cert.pem
       # Client key and cert for SSL handshake with Fabric CA
       client:
         key:
-          path: ${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.key
+          path: ${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.key
         cert:
-          path: ${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.crt
+          path: ${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.crt
 
     # Fabric-CA supports dynamic user enrollment via REST APIs. A "root" user, a.k.a registrar, is
     # needed to enroll and invoke new users.
@@ -435,6 +439,26 @@ certificateAuthorities:
       enrollSecret: adminpw
     # [Optional] The optional name of the CA.
     caName: ca.org1.example.com
+  tlsca.org1.example.com:
+    # [Optional] Default: Infer from hostname
+    url: https://ca.org1.example.com:7154
+    tlsCACerts:
+      # Comma-Separated list of paths
+      path: ${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/org1.example.com/tlsca/tlsca.org1.example.com-cert.pem
+      # Client key and cert for SSL handshake with Fabric CA
+      client:
+        key:
+          path: ${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.key
+        cert:
+          path: ${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.crt
+
+    # Fabric-CA supports dynamic user enrollment via REST APIs. A "root" user, a.k.a registrar, is
+    # needed to enroll and invoke new users.
+    registrar:
+      enrollId: admin2
+      enrollSecret: adminpw2
+    # [Optional] The optional name of the CA.
+    caName: tlsca.org1.example.com
   ca.org2.example.com:
     url: https://ca.org2.example.com:8054
     # [Optional] The optional server name for target override
@@ -442,13 +466,13 @@ certificateAuthorities:
     #  ssl-target-name-override: ca.org2.example.com
     tlsCACerts:
       # Comma-Separated list of paths
-      path: ${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/org2.example.com/tlsca/tlsca.org2.example.com-cert.pem
+      path: ${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/org2.example.com/tlsca/tlsca.org2.example.com-cert.pem
       # Client key and cert for SSL handshake with Fabric CA
       client:
         key:
-          path: ${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.key
+          path: ${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.key
         cert:
-          path: ${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.crt
+          path: ${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.crt
 
      # Fabric-CA supports dynamic user enrollment via REST APIs. A "root" user, a.k.a registrar, is
      # needed to enroll and invoke new users.
@@ -531,3 +555,57 @@ certificateAuthorities:
 #      urlSubstitutionExp:
 #      sslTargetOverrideUrlSubstitutionExp: ca.example.com
 #      mappedHost: ca.org2.example.com
+
+###############################################################################
+#
+#    Operations section
+#    copied from Fabric's core.yaml
+###############################################################################
+operations:
+  # host and port for the operations server
+  listenAddress: 127.0.0.1:8080
+
+  # TLS configuration for the operations endpoint
+  tls:
+    # TLS enabled
+    enabled: false
+
+    # TODO replace cert.file, key.file and clientRootCAs.files to tlsCACerts as used elsewhere in this config file
+    # path to PEM encoded server certificate for the operations server
+    cert:
+      file:
+
+    # path to PEM encoded server key for the operations server
+    key:
+      file:
+
+    # require client certificate authentication to access all resources
+    clientAuthRequired: false
+
+    # paths to PEM encoded ca certificates to trust for client authentication
+    clientRootCAs:
+      files: []
+
+###############################################################################
+#
+#    Metrics section
+#    copied from Fabric's core.yaml
+###############################################################################
+metrics:
+  # metrics provider is one of statsd, prometheus, or disabled
+  provider: prometheus
+
+  # statsd configuration
+  statsd:
+    # network type: tcp or udp
+    network: udp
+
+    # statsd server address
+    address: 127.0.0.1:8125
+
+    # the interval at which locally cached counters and gauges are pushed
+    # to statsd; timings are pushed immediately
+    writeInterval: 10s
+
+    # prefix is prepended to all emitted statsd metrics
+    prefix:

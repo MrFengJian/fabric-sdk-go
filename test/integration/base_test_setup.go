@@ -8,12 +8,11 @@ package integration
 
 import (
 	"fmt"
-	"go/build"
 	"os"
-	"path"
 	"path/filepath"
 	"testing"
 
+	pb "github.com/hyperledger/fabric-protos-go/peer"
 	"github.com/hyperledger/fabric-sdk-go/pkg/client/channel"
 	mspclient "github.com/hyperledger/fabric-sdk-go/pkg/client/msp"
 	"github.com/hyperledger/fabric-sdk-go/pkg/client/resmgmt"
@@ -29,19 +28,18 @@ import (
 	"github.com/hyperledger/fabric-sdk-go/pkg/util/test"
 	"github.com/hyperledger/fabric-sdk-go/test/metadata"
 	"github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/common/cauthdsl"
-	cb "github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/protos/common"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
 // BaseSetupImpl implementation of BaseTestSetup
 type BaseSetupImpl struct {
-	Identity          msp.Identity
-	Targets           []string
-	ConfigFile        string
-	OrgID             string
-	ChannelID         string
-	ChannelConfigFile string
+	Identity            msp.Identity
+	Targets             []string
+	ConfigFile          string
+	OrgID               string
+	ChannelID           string
+	ChannelConfigTxFile string
 }
 
 // Initial B values for ExampleCC
@@ -144,7 +142,7 @@ func (setup *BaseSetupImpl) Initialize(sdk *fabsdk.FabricSDK) error {
 	}
 	setup.Targets = targets
 
-	r, err := os.Open(setup.ChannelConfigFile)
+	r, err := os.Open(setup.ChannelConfigTxFile)
 	if err != nil {
 		return errors.Wrapf(err, "opening channel config file failed")
 	}
@@ -166,40 +164,43 @@ func (setup *BaseSetupImpl) Initialize(sdk *fabsdk.FabricSDK) error {
 
 // GetDeployPath returns the path to the chaincode fixtures
 func GetDeployPath() string {
-	const ccPath = "test/fixtures/testdata"
-	return path.Join(goPath(), "src", metadata.Project, ccPath)
+	const ccPath = "test/fixtures/testdata/go"
+	return filepath.Join(metadata.GetProjectPath(), ccPath)
 }
 
-// GetChannelConfigPath returns the path to the named channel config file
-func GetChannelConfigPath(filename string) string {
-	return path.Join(goPath(), "src", metadata.Project, metadata.ChannelConfigPath, filename)
+// GetJavaDeployPath returns the path to the java chaincode fixtrues
+func GetJavaDeployPath() string {
+	const ccPath = "test/fixtures/testdata/java"
+	return filepath.Join(metadata.GetProjectPath(), ccPath)
+}
+
+// GetNodeDeployPath returns the path to the node chaincode fixtrues
+func GetNodeDeployPath() string {
+	const ccPath = "test/fixtures/testdata/node"
+	return filepath.Join(metadata.GetProjectPath(), ccPath)
+}
+
+// GetChannelConfigTxPath returns the path to the named channel config file
+func GetChannelConfigTxPath(filename string) string {
+	return filepath.Join(metadata.GetProjectPath(), metadata.ChannelConfigPath, filename)
 }
 
 // GetConfigPath returns the path to the named config fixture file
 func GetConfigPath(filename string) string {
 	const configPath = "test/fixtures/config"
-	return path.Join(goPath(), "src", metadata.Project, configPath, filename)
+	return filepath.Join(metadata.GetProjectPath(), configPath, filename)
 }
 
 // GetConfigOverridesPath returns the path to the named config override fixture file
 func GetConfigOverridesPath(filename string) string {
 	const configPath = "test/fixtures/config"
-	return path.Join(goPath(), "src", metadata.Project, configPath, "overrides", filename)
+	return filepath.Join(metadata.GetProjectPath(), configPath, "overrides", filename)
 }
 
 // GetCryptoConfigPath returns the path to the named crypto-config override fixture file
 func GetCryptoConfigPath(filename string) string {
 	const configPath = "test/fixtures/fabric/v1/crypto-config"
-	return path.Join(goPath(), "src", metadata.Project, configPath, filename)
-}
-
-// goPath returns the current GOPATH. If the system
-// has multiple GOPATHs then the first is used.
-func goPath() string {
-	gpDefault := build.Default.GOPATH
-	gps := filepath.SplitList(gpDefault)
-
-	return gps[0]
+	return filepath.Join(metadata.GetProjectPath(), configPath, filename)
 }
 
 // OrgContext provides SDK client context for a given org
@@ -230,7 +231,7 @@ func CreateChannelAndUpdateAnchorPeers(t *testing.T, sdk *fabsdk.FabricSDK, chan
 
 	req := resmgmt.SaveChannelRequest{
 		ChannelID:         channelID,
-		ChannelConfigPath: GetChannelConfigPath(channelConfigFile),
+		ChannelConfigPath: GetChannelConfigTxPath(channelConfigFile),
 		SigningIdentities: signingIdentities,
 	}
 	_, err = chMgmtClient.SaveChannel(req, resmgmt.WithRetry(retry.DefaultResMgmtOpts), resmgmt.WithOrdererEndpoint("orderer.example.com"))
@@ -243,7 +244,7 @@ func CreateChannelAndUpdateAnchorPeers(t *testing.T, sdk *fabsdk.FabricSDK, chan
 	for _, orgCtx := range orgsContext {
 		req := resmgmt.SaveChannelRequest{
 			ChannelID:         channelID,
-			ChannelConfigPath: GetChannelConfigPath(orgCtx.AnchorPeerConfigFile),
+			ChannelConfigPath: GetChannelConfigTxPath(orgCtx.AnchorPeerConfigFile),
 			SigningIdentities: []msp.SigningIdentity{orgCtx.SigningIdentity},
 		}
 		if _, err := orgCtx.ResMgmt.SaveChannel(req, resmgmt.WithRetry(retry.DefaultResMgmtOpts), resmgmt.WithOrdererEndpoint("orderer.example.com")); err != nil {
@@ -305,7 +306,7 @@ func InstallChaincode(resMgmt *resmgmt.Client, ccPkg *resource.CCPackage, ccPath
 }
 
 // InstantiateChaincode instantiates the given chaincode to the given channel
-func InstantiateChaincode(resMgmt *resmgmt.Client, channelID, ccName, ccPath, ccVersion string, ccPolicyStr string, args [][]byte, collConfigs ...*cb.CollectionConfig) (resmgmt.InstantiateCCResponse, error) {
+func InstantiateChaincode(resMgmt *resmgmt.Client, channelID, ccName, ccPath, ccVersion string, ccPolicyStr string, args [][]byte, collConfigs ...*pb.CollectionConfig) (resmgmt.InstantiateCCResponse, error) {
 	ccPolicy, err := cauthdsl.FromString(ccPolicyStr)
 	if err != nil {
 		return resmgmt.InstantiateCCResponse{}, errors.Wrapf(err, "error creating CC policy [%s]", ccPolicyStr)
@@ -325,6 +326,115 @@ func InstantiateChaincode(resMgmt *resmgmt.Client, channelID, ccName, ccPath, cc
 	)
 }
 
+// InstantiateJavaChaincode instantiates the given java chaincode to the given channel
+func InstantiateJavaChaincode(resMgmt *resmgmt.Client, channelID, ccName, ccPath, ccVersion string, ccPolicyStr string, args [][]byte, collConfigs ...*pb.CollectionConfig) (resmgmt.InstantiateCCResponse, error) {
+	ccPolicy, err := cauthdsl.FromString(ccPolicyStr)
+	if err != nil {
+		return resmgmt.InstantiateCCResponse{}, errors.Wrapf(err, "error creating CC policy [%s]", ccPolicyStr)
+	}
+
+	return resMgmt.InstantiateCC(
+		channelID,
+		resmgmt.InstantiateCCRequest{
+			Name:       ccName,
+			Path:       ccPath,
+			Version:    ccVersion,
+			Lang:       pb.ChaincodeSpec_JAVA,
+			Args:       args,
+			Policy:     ccPolicy,
+			CollConfig: collConfigs,
+		},
+		resmgmt.WithRetry(retry.DefaultResMgmtOpts),
+	)
+}
+
+// InstantiateNodeChaincode instantiates the given node chaincode to the given channel
+func InstantiateNodeChaincode(resMgmt *resmgmt.Client, channelID, ccName, ccPath, ccVersion string, ccPolicyStr string, args [][]byte, collConfigs ...*pb.CollectionConfig) (resmgmt.InstantiateCCResponse, error) {
+	ccPolicy, err := cauthdsl.FromString(ccPolicyStr)
+	if err != nil {
+		return resmgmt.InstantiateCCResponse{}, errors.Wrapf(err, "error creating CC policy [%s]", ccPolicyStr)
+	}
+
+	return resMgmt.InstantiateCC(
+		channelID,
+		resmgmt.InstantiateCCRequest{
+			Name:       ccName,
+			Path:       ccPath,
+			Version:    ccVersion,
+			Lang:       pb.ChaincodeSpec_NODE,
+			Args:       args,
+			Policy:     ccPolicy,
+			CollConfig: collConfigs,
+		},
+		resmgmt.WithRetry(retry.DefaultResMgmtOpts),
+	)
+}
+
+// UpgradeChaincode upgrades the given chaincode on the given channel
+func UpgradeChaincode(resMgmt *resmgmt.Client, channelID, ccName, ccPath, ccVersion string, ccPolicyStr string, args [][]byte, collConfigs ...*pb.CollectionConfig) (resmgmt.UpgradeCCResponse, error) {
+	ccPolicy, err := cauthdsl.FromString(ccPolicyStr)
+	if err != nil {
+		return resmgmt.UpgradeCCResponse{}, errors.Wrapf(err, "error creating CC policy [%s]", ccPolicyStr)
+	}
+
+	return resMgmt.UpgradeCC(
+		channelID,
+		resmgmt.UpgradeCCRequest{
+			Name:       ccName,
+			Path:       ccPath,
+			Version:    ccVersion,
+			Args:       args,
+			Policy:     ccPolicy,
+			CollConfig: collConfigs,
+		},
+		resmgmt.WithRetry(retry.DefaultResMgmtOpts),
+	)
+}
+
+// UpgradeJavaChaincode upgrades the given java chaincode on the given channel
+func UpgradeJavaChaincode(resMgmt *resmgmt.Client, channelID, ccName, ccPath, ccVersion string, ccPolicyStr string, args [][]byte, collConfigs ...*pb.CollectionConfig) (resmgmt.UpgradeCCResponse, error) {
+	ccPolicy, err := cauthdsl.FromString(ccPolicyStr)
+	if err != nil {
+		return resmgmt.UpgradeCCResponse{}, errors.Wrapf(err, "error creating CC policy [%s]", ccPolicyStr)
+	}
+
+	return resMgmt.UpgradeCC(
+		channelID,
+		resmgmt.UpgradeCCRequest{
+			Name:       ccName,
+			Path:       ccPath,
+			Version:    ccVersion,
+			Lang:       pb.ChaincodeSpec_JAVA,
+			Args:       args,
+			Policy:     ccPolicy,
+			CollConfig: collConfigs,
+		},
+		resmgmt.WithRetry(retry.DefaultResMgmtOpts),
+	)
+}
+
+// UpgradeNodeChaincode upgrades the given node chaincode on the given channel
+func UpgradeNodeChaincode(resMgmt *resmgmt.Client, channelID, ccName, ccPath, ccVersion string, ccPolicyStr string, args [][]byte, collConfigs ...*pb.CollectionConfig) (resmgmt.UpgradeCCResponse, error) {
+	ccPolicy, err := cauthdsl.FromString(ccPolicyStr)
+	if err != nil {
+		return resmgmt.UpgradeCCResponse{}, errors.Wrapf(err, "error creating CC policy [%s]", ccPolicyStr)
+	}
+
+	return resMgmt.UpgradeCC(
+		channelID,
+		resmgmt.UpgradeCCRequest{
+			Name:       ccName,
+			Path:       ccPath,
+			Version:    ccVersion,
+			Lang:       pb.ChaincodeSpec_NODE,
+			Args:       args,
+			Policy:     ccPolicy,
+			CollConfig: collConfigs,
+		},
+		resmgmt.WithRetry(retry.DefaultResMgmtOpts),
+	)
+}
+
 // DiscoverLocalPeers queries the local peers for the given MSP context and returns all of the peers. If
 // the number of peers does not match the expected number then an error is returned.
 func DiscoverLocalPeers(ctxProvider contextAPI.ClientProvider, expectedPeers int) ([]fabAPI.Peer, error) {
@@ -335,9 +445,9 @@ func DiscoverLocalPeers(ctxProvider contextAPI.ClientProvider, expectedPeers int
 
 	discoveredPeers, err := retry.NewInvoker(retry.New(retry.TestRetryOpts)).Invoke(
 		func() (interface{}, error) {
-			peers, err := ctx.LocalDiscoveryService().GetPeers()
-			if err != nil {
-				return nil, errors.Wrapf(err, "error getting peers for MSP [%s]", ctx.Identifier().MSPID)
+			peers, serviceErr := ctx.LocalDiscoveryService().GetPeers()
+			if serviceErr != nil {
+				return nil, errors.Wrapf(serviceErr, "error getting peers for MSP [%s]", ctx.Identifier().MSPID)
 			}
 			if len(peers) < expectedPeers {
 				return nil, status.New(status.TestStatus, status.GenericTransient.ToInt32(), fmt.Sprintf("Expecting %d peers but got %d", expectedPeers, len(peers)), nil)
@@ -387,6 +497,15 @@ func WaitForOrdererConfigUpdate(t *testing.T, client *resmgmt.Client, channelID 
 			if currentBlock <= lastConfigBlock && !genesis {
 				return nil, status.New(status.TestStatus, status.GenericTransient.ToInt32(), fmt.Sprintf("Block number was not incremented [%d, %d]", currentBlock, lastConfigBlock), nil)
 			}
+
+			block, err := client.QueryConfigBlockFromOrderer(channelID, resmgmt.WithOrdererEndpoint("orderer.example.com"))
+			if err != nil {
+				return nil, status.New(status.TestStatus, status.GenericTransient.ToInt32(), err.Error(), nil)
+			}
+			if block.Header.Number != currentBlock {
+				return nil, status.New(status.TestStatus, status.GenericTransient.ToInt32(), fmt.Sprintf("Invalid block number [%d, %d]", block.Header.Number, currentBlock), nil)
+			}
+
 			return &currentBlock, nil
 		},
 	)

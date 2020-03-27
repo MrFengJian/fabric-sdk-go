@@ -11,6 +11,7 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -30,9 +31,10 @@ import (
 
 const (
 	org1               = "Org1"
+	org1CA             = "ca.org1.example.com"
+	org2CA             = "ca.org2.example.com"
 	caServerURLListen  = "http://127.0.0.1:0"
 	dummyUserStorePath = "/tmp/userstore"
-	configPath         = "../core/config/testdata/config_test.yaml"
 )
 
 var caServerURL string
@@ -52,6 +54,7 @@ var caServer = &mockmsp.MockFabricCAServer{}
 func (f *textFixture) setup(configBackend ...core.ConfigBackend) { //nolint
 
 	if len(configBackend) == 0 {
+		configPath := filepath.Join(getConfigPath(), configTestFile)
 		backend, err := getCustomBackend(configPath)
 		if err != nil {
 			panic(err)
@@ -146,7 +149,7 @@ func (f *textFixture) close() {
 
 // readCert Reads a random cert for testing
 func readCert(t *testing.T) []byte {
-	cert, err := ioutil.ReadFile("testdata/root.pem")
+	cert, err := ioutil.ReadFile(filepath.Join("testdata", "root.pem"))
 	if err != nil {
 		t.Fatalf("Error reading cert: %s", err)
 	}

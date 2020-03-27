@@ -7,11 +7,11 @@ SPDX-License-Identifier: Apache-2.0
 package dynamicdiscovery
 
 import (
-	discclient "github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/discovery/client"
 	coptions "github.com/hyperledger/fabric-sdk-go/pkg/common/options"
 	contextAPI "github.com/hyperledger/fabric-sdk-go/pkg/common/providers/context"
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/fab"
 	reqContext "github.com/hyperledger/fabric-sdk-go/pkg/context"
+	fabdiscovery "github.com/hyperledger/fabric-sdk-go/pkg/fab/discovery"
 	"github.com/pkg/errors"
 )
 
@@ -50,6 +50,17 @@ func (s *LocalService) localContext() contextAPI.Local {
 }
 
 func (s *LocalService) queryPeers() ([]fab.Peer, error) {
+	peers, err := s.doQueryPeers()
+
+	if err != nil && s.ErrHandler != nil {
+		logger.Debugf("Got error from discovery query: %s. Invoking error handler", err)
+		s.ErrHandler(s.ctx, "", err)
+	}
+
+	return peers, err
+}
+
+func (s *LocalService) doQueryPeers() ([]fab.Peer, error) {
 	logger.Debug("Refreshing local peers from discovery service...")
 
 	ctx := s.localContext()
@@ -65,7 +76,7 @@ func (s *LocalService) queryPeers() ([]fab.Peer, error) {
 	reqCtx, cancel := reqContext.NewRequest(ctx, reqContext.WithTimeout(s.responseTimeout))
 	defer cancel()
 
-	req := discclient.NewRequest().AddLocalPeersQuery()
+	req := fabdiscovery.NewRequest().AddLocalPeersQuery()
 	responses, err := s.discoveryClient().Send(reqCtx, req, *target)
 	if err != nil {
 		return nil, errors.Wrap(err, "error calling discover service send")
@@ -77,7 +88,7 @@ func (s *LocalService) queryPeers() ([]fab.Peer, error) {
 	response := responses[0]
 	endpoints, err := response.ForLocal().Peers()
 	if err != nil {
-		return nil, errors.Wrap(err, "error getting peers from discovery response")
+		return nil, DiscoveryError(err)
 	}
 
 	return s.filterLocalMSP(asPeers(ctx, endpoints)), nil

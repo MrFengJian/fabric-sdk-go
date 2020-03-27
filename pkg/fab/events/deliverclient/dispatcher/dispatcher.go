@@ -7,7 +7,9 @@ SPDX-License-Identifier: Apache-2.0
 package dispatcher
 
 import (
-	ab "github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/protos/orderer"
+	cb "github.com/hyperledger/fabric-protos-go/common"
+	ab "github.com/hyperledger/fabric-protos-go/orderer"
+	pb "github.com/hyperledger/fabric-protos-go/peer"
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/logging"
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/options"
 	fabcontext "github.com/hyperledger/fabric-sdk-go/pkg/common/providers/context"
@@ -16,8 +18,6 @@ import (
 	clientdisp "github.com/hyperledger/fabric-sdk-go/pkg/fab/events/client/dispatcher"
 	"github.com/hyperledger/fabric-sdk-go/pkg/fab/events/deliverclient/connection"
 	esdispatcher "github.com/hyperledger/fabric-sdk-go/pkg/fab/events/service/dispatcher"
-	cb "github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/protos/common"
-	pb "github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/protos/peer"
 	"github.com/pkg/errors"
 )
 
@@ -104,12 +104,19 @@ func (ed *Dispatcher) handleDeliverResponseStatus(evt *pb.DeliverResponse_Status
 		logger.Warnf("Error disconnecting: %s", err)
 	}
 
-	ed.Dispatcher.HandleDisconnectedEvent(&clientdisp.DisconnectedEvent{
-		Err: errors.Errorf("got error status from deliver server: %s", evt.Status),
-	})
+	ed.Dispatcher.HandleDisconnectedEvent(disconnectedEventFromStatus(evt.Status))
 }
 
 func (ed *Dispatcher) registerHandlers() {
 	ed.RegisterHandler(&SeekEvent{}, ed.handleSeekEvent)
 	ed.RegisterHandler(&connection.Event{}, ed.handleEvent)
+}
+
+func disconnectedEventFromStatus(status cb.Status) *clientdisp.DisconnectedEvent {
+	err := errors.Errorf("got error status from deliver server: %s", status)
+
+	if status == cb.Status_FORBIDDEN {
+		return clientdisp.NewFatalDisconnectedEvent(err)
+	}
+	return clientdisp.NewDisconnectedEvent(err)
 }

@@ -288,6 +288,10 @@ func (c *Client) connectWithRetry(maxAttempts uint, timeBetweenAttempts time.Dur
 
 	var attempts uint
 	for {
+		if c.Stopped() {
+			return errors.New("event client is closed")
+		}
+
 		attempts++
 		logger.Debugf("Attempt #%d to connect...", attempts)
 		if err := c.connect(); err != nil {
@@ -363,13 +367,7 @@ func (c *Client) mustSetConnectionState(newState ConnectionState) {
 
 func (c *Client) monitorConnection() {
 	logger.Debug("Monitoring connection")
-	for {
-		event, ok := <-c.connEvent
-		if !ok {
-			logger.Debugln("Connection has closed.")
-			break
-		}
-
+	for event := range c.connEvent {
 		if c.Stopped() {
 			logger.Debugln("Event client has been stopped.")
 			break
@@ -382,6 +380,12 @@ func (c *Client) monitorConnection() {
 		} else if c.reconn {
 			logger.Warnf("Event client has disconnected. Details: %s", event.Err)
 			if c.setConnectionState(Connected, Disconnected) {
+				if event.Err.IsFatal() {
+					logger.Warnf("Reconnect is not possible due to fatal error. Terminating: %s", event.Err)
+					go c.Close()
+					break
+				}
+
 				logger.Warn("Attempting to reconnect...")
 				go c.reconnect()
 			} else if c.setConnectionState(Connecting, Disconnected) {
@@ -411,8 +415,10 @@ func (c *Client) reconnect() {
 	}
 
 	if err := c.connectWithRetry(c.maxReconnAttempts, c.timeBetweenConnAttempts); err != nil {
-		logger.Warnf("Could not reconnect event client: %s. Closing.", err)
-		c.Close()
+		logger.Warnf("Could not reconnect event client: %s", err)
+		if !c.Stopped() {
+			c.Close()
+		}
 	} else {
 		logger.Infof("Event client has reconnected")
 	}

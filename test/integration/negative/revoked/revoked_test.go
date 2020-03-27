@@ -39,14 +39,14 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/hyperledger/fabric-protos-go/common"
+	"github.com/hyperledger/fabric-protos-go/msp"
 	"github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/bccsp/utils"
 	"github.com/hyperledger/fabric-sdk-go/pkg/client/channel"
 	msp2 "github.com/hyperledger/fabric-sdk-go/pkg/common/providers/msp"
 	"github.com/hyperledger/fabric-sdk-go/pkg/core/config"
 	"github.com/hyperledger/fabric-sdk-go/pkg/fab/resource"
 	"github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/common/cauthdsl"
-	"github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/protos/common"
-	"github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/protos/msp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -215,19 +215,32 @@ func testRevokedPeer(t *testing.T) {
 	loadOrgPeers(t, org1AdminClientContext)
 
 	//query with revoked user
+	t.Log("query with revoked user - should fail with 'access denied'")
 	queryCC(t, org1UserChannelClientContext, "exampleCC", false, "access denied")
 	//query with valid user
+	t.Log("query with valid user - should fail with 'chaincode exampleCC not found'")
 	queryCC(t, org2UserChannelClientContext, "exampleCC", false, "chaincode exampleCC not found")
 	//query already instantiated chaincode with revoked user
+	t.Log("query already instantiated chaincode with revoked user - should fail with 'access denied'")
 	queryCC(t, org1UserChannelClientContext, "exampleCC2", false, "access denied")
 	//query already instantiated chaincode with valid user
+	t.Log("query already instantiated chaincode with valid user - should fail with 'signature validation failed'")
 	queryCC(t, org2UserChannelClientContext, "exampleCC2", false, "signature validation failed")
 }
 
 //testRevokedUser performs revoke peer test
 func testRevokedUser(t *testing.T) {
-
-	sdk, err := fabsdk.New(config.FromFile(integration.GetConfigPath(configFilename)))
+	var sdk *fabsdk.FabricSDK
+	var err error
+	sdk, err = fabsdk.New(
+		config.FromFile(integration.GetConfigPath(configFilename)),
+		fabsdk.WithErrorHandler(func(ctxt fab.ClientContext, channelID string, err error) {
+			if strings.Contains(err.Error(), "access denied") {
+				t.Logf("Closing context after error: %s", err)
+				go sdk.CloseContext(ctxt)
+			}
+		}),
+	)
 	require.NoError(t, err)
 	defer sdk.Close()
 
@@ -241,11 +254,9 @@ func testRevokedUser(t *testing.T) {
 
 	//Try User1 whose certs are revoked, shouldn't be able to query channel config
 	user1ChannelContext := sdk.ChannelContext(channelID, fabsdk.WithUser(org1User), fabsdk.WithOrg(org1))
-	ledgerClient, err = ledger.New(user1ChannelContext)
-	require.NoError(t, err)
-	cfg, err = ledgerClient.QueryConfig(ledger.WithTargetEndpoints("peer1.org2.example.com"))
+	_, err = ledger.New(user1ChannelContext)
 	require.Error(t, err)
-	require.Empty(t, cfg)
+	assert.True(t, strings.Contains(err.Error(), "access denied"))
 }
 
 //prepareReadWriteSets prepares read write sets for channel config update
@@ -312,7 +323,7 @@ func prepareReadWriteSets(t *testing.T, crlBytes [][]byte, ledgerClient *ledger.
 func updateChannelConfig(t *testing.T, readSet *common.ConfigGroup, writeSet *common.ConfigGroup, resmgmtClient *resmgmt.Client, org1MspClient, org2MspClient *mspclient.Client) {
 
 	//read block template and update read/write sets
-	txBytes, err := ioutil.ReadFile(integration.GetChannelConfigPath("twoorgs.genesis.block"))
+	txBytes, err := ioutil.ReadFile(integration.GetChannelConfigTxPath("twoorgs.genesis.block"))
 	require.NoError(t, err)
 
 	block := &common.Block{}
@@ -432,7 +443,7 @@ func joinChannel(t *testing.T, sdk *fabsdk.FabricSDK) {
 	require.NoError(t, err, "failed to get org2AdminIdentity")
 
 	req := resmgmt.SaveChannelRequest{ChannelID: "orgchannel",
-		ChannelConfigPath: integration.GetChannelConfigPath("orgchannel.tx"),
+		ChannelConfigPath: integration.GetChannelConfigTxPath("orgchannel.tx"),
 		SigningIdentities: []msp2.SigningIdentity{org1AdminIdentity, org2AdminIdenity}}
 	txID, err := ordererResMgmt.SaveChannel(req, resmgmt.WithRetry(retry.DefaultResMgmtOpts), resmgmt.WithOrdererEndpoint("orderer.example.com"))
 	require.Nil(t, err, "error should be nil")
@@ -447,8 +458,15 @@ func joinChannel(t *testing.T, sdk *fabsdk.FabricSDK) {
 func queryCC(t *testing.T, channelClientContext contextAPI.ChannelProvider, ccID string, success bool, expectedMsg string) {
 	chClientOrg1User, err := channel.New(channelClientContext)
 	if err != nil {
-		t.Fatalf("Failed to create new channel client for Org1 user: %s", err)
+		if success {
+			t.Fatalf("Failed to create new channel client for Org1 user: %s", err)
+		}
+		if !strings.Contains(err.Error(), expectedMsg) {
+			t.Fatalf("Expected error: '%s' , but got '%s'", expectedMsg, err)
+		}
+		return
 	}
+
 	resp, err := chClientOrg1User.Query(channel.Request{ChaincodeID: ccID, Fcn: "invoke", Args: integration.ExampleCCDefaultQueryArgs()},
 		channel.WithRetry(retry.DefaultChannelOpts), channel.WithTargetEndpoints("peer0.org1.example.com"))
 

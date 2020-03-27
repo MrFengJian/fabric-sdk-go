@@ -12,6 +12,7 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -27,13 +28,14 @@ import (
 	"github.com/hyperledger/fabric-sdk-go/pkg/fabsdk"
 	mspImpl "github.com/hyperledger/fabric-sdk-go/pkg/msp"
 	"github.com/hyperledger/fabric-sdk-go/pkg/msp/test/mockmsp"
+	"github.com/hyperledger/fabric-sdk-go/test/metadata"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 const (
 	caServerURLListen = "http://localhost:0"
-	configPath        = "../../core/config/testdata/config_test.yaml"
+	configFile        = "config_test.yaml"
 )
 
 var caServerURL string
@@ -42,8 +44,8 @@ type nwConfig struct {
 	CertificateAuthorities map[string]mspImpl.CAConfig
 }
 
-// TestMSP is a unit test for Client enrollment and re-enrollment scenarios
-func TestMSP(t *testing.T) {
+// TestEnroll is a unit test for Client enrollment and re-enrollment scenarios
+func TestEnroll(t *testing.T) {
 
 	f := testFixture{}
 	sdk := f.setup()
@@ -90,9 +92,12 @@ func TestMSP(t *testing.T) {
 	// Try with a non-default org
 	testWithOrg2(t, ctxProvider)
 
+	// Try with another CA instance
+	testWithOrg1TLSCAInstance(t, ctxProvider)
+
 }
 
-func TestMSPWithProfile(t *testing.T) {
+func TestEnrollWithProfile(t *testing.T) {
 	f := testFixture{}
 	sdk := f.setup()
 	defer sdk.Close()
@@ -122,7 +127,7 @@ func TestMSPWithProfile(t *testing.T) {
 	}
 }
 
-func TestMSPWithType(t *testing.T) {
+func TestEnrollWithType(t *testing.T) {
 	f := testFixture{}
 	sdk := f.setup()
 	defer sdk.Close()
@@ -148,7 +153,7 @@ func TestMSPWithType(t *testing.T) {
 	}
 }
 
-func TestMSPWithLabel(t *testing.T) {
+func TestEnrollWithLabel(t *testing.T) {
 	f := testFixture{}
 	sdk := f.setup()
 	defer sdk.Close()
@@ -178,7 +183,7 @@ func TestMSPWithLabel(t *testing.T) {
 	}
 }
 
-func TestMSPWithAttributeRequests(t *testing.T) {
+func TestEnrollWithAttributeRequests(t *testing.T) {
 	f := testFixture{}
 	sdk := f.setup()
 	defer sdk.Close()
@@ -209,8 +214,9 @@ func TestMSPWithAttributeRequests(t *testing.T) {
 	}
 }
 
-func TestWithNonExistentOrganization(t *testing.T) {
+func TestNewWithNonExistentOrganization(t *testing.T) {
 	// Instantiate the SDK
+	configPath := filepath.Join(metadata.GetProjectPath(), metadata.SDKConfigPath, configFile)
 	sdk, err := fabsdk.New(config.FromFile(configPath))
 	if err != nil {
 		t.Fatalf("SDK init failed: %s", err)
@@ -218,6 +224,48 @@ func TestWithNonExistentOrganization(t *testing.T) {
 	_, err = New(sdk.Context(), WithOrg("nonExistentOrg"))
 	if err == nil {
 		t.Fatal("Should have failed for non-existing organization")
+	}
+
+}
+
+func TestNewWithOrg1CAInstance(t *testing.T) {
+	// Instantiate the SDK
+	configPath := filepath.Join(metadata.GetProjectPath(), metadata.SDKConfigPath, configFile)
+	sdk, err := fabsdk.New(config.FromFile(configPath))
+	if err != nil {
+		t.Fatalf("SDK init failed: %s", err)
+	}
+	_, err = New(sdk.Context(), WithOrg("Org1"), WithCAInstance("tlsca.org1.example.com"))
+	if err != nil {
+		t.Fatal("Should not have failed with existing CA instance")
+	}
+
+}
+
+func TestNewWithOrg2CAInstance(t *testing.T) {
+	// Instantiate the SDK
+	configPath := filepath.Join(metadata.GetProjectPath(), metadata.SDKConfigPath, configFile)
+	sdk, err := fabsdk.New(config.FromFile(configPath))
+	if err != nil {
+		t.Fatalf("SDK init failed: %s", err)
+	}
+	_, err = New(sdk.Context(), WithOrg("Org2"), WithCAInstance("ca.org2.example.com"))
+	if err != nil {
+		t.Fatal("Should not have failed with existing CA instance")
+	}
+
+}
+
+func TestNewWithCAInstanceFromAnotherOrg(t *testing.T) {
+	// Instantiate the SDK
+	configPath := filepath.Join(metadata.GetProjectPath(), metadata.SDKConfigPath, configFile)
+	sdk, err := fabsdk.New(config.FromFile(configPath))
+	if err != nil {
+		t.Fatalf("SDK init failed: %s", err)
+	}
+	_, err = New(sdk.Context(), WithOrg("Org1"), WithCAInstance("ca.org2.example.com"))
+	if err == nil {
+		t.Fatal("Should have failed with CA instance from another org")
 	}
 
 }
@@ -248,7 +296,7 @@ func TestNewWithClientOptionError(t *testing.T) {
 
 // WithClientOptionError client option that generates error
 func WithClientOptionError() ClientOption {
-	return func(msp *Client) error {
+	return func(o *clientOptions) error {
 		return errors.New("Client option error")
 	}
 }
@@ -384,7 +432,7 @@ func TestGetAllIdentitiesFailure(t *testing.T) {
 
 // withOptionError is request option that generates error
 func withOptionError() RequestOption {
-	return func(ctx contextApi.Client, o *requestOptions) error {
+	return func(o *requestOptions) error {
 		return errors.New("Option Error")
 	}
 }
@@ -412,6 +460,33 @@ func testWithOrg2(t *testing.T, ctxProvider contextApi.ClientProvider) {
 	}
 
 	if org2EnrolledUser.Identifier().MSPID != "Org2MSP" {
+		t.Fatal("Enrolled user mspID doesn't match")
+	}
+}
+
+func testWithOrg1TLSCAInstance(t *testing.T, ctxProvider contextApi.ClientProvider) {
+	msp, err := New(ctxProvider, WithOrg("Org1"), WithCAInstance("tlsca.org1.example.com"))
+	if err != nil {
+		t.Fatalf("failed to create CA client: %s", err)
+	}
+
+	org1lUsername := randomUsername()
+
+	err = msp.Enroll(org1lUsername, WithSecret("enrollmentSecret"))
+	if err != nil {
+		t.Fatalf("Enroll return error %s", err)
+	}
+
+	org2EnrolledUser, err := msp.GetSigningIdentity(org1lUsername)
+	if err != nil {
+		t.Fatal("Expected to find user")
+	}
+
+	if org2EnrolledUser.Identifier().ID != org1lUsername {
+		t.Fatal("Enrolled user name doesn't match")
+	}
+
+	if org2EnrolledUser.Identifier().MSPID != "Org1MSP" {
 		t.Fatal("Enrolled user mspID doesn't match")
 	}
 }
@@ -466,6 +541,7 @@ func (f *testFixture) setup() *fabsdk.FabricSDK {
 		caServerURL = "http://" + lis.Addr().String()
 	}
 
+	configPath := filepath.Join(metadata.GetProjectPath(), metadata.SDKConfigPath, configFile)
 	backend, err := config.FromFile(configPath)()
 	if err != nil {
 		panic(err)
@@ -544,10 +620,13 @@ func getCustomBackend(currentBackends ...core.ConfigBackend) []core.ConfigBacken
 
 	ca1Config := networkConfig.CertificateAuthorities["ca.org1.example.com"]
 	ca1Config.URL = caServerURL
+	tlsca1Config := networkConfig.CertificateAuthorities["tlsca.org1.example.com"]
+	tlsca1Config.URL = caServerURL
 	ca2Config := networkConfig.CertificateAuthorities["ca.org2.example.com"]
 	ca2Config.URL = caServerURL
 
 	networkConfig.CertificateAuthorities["ca.org1.example.com"] = ca1Config
+	networkConfig.CertificateAuthorities["tlsca.org1.example.com"] = tlsca1Config
 	networkConfig.CertificateAuthorities["ca.org2.example.com"] = ca2Config
 	backendMap["certificateAuthorities"] = networkConfig.CertificateAuthorities
 

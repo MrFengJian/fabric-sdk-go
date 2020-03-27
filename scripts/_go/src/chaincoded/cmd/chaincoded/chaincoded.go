@@ -19,7 +19,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -33,6 +33,7 @@ var (
 	containerNameRegEx   = regexp.MustCompile("(.*)-(.*)-(.*)-(.*)")
 	containerStartRegEx  = regexp.MustCompile("/containers/(.+)/start")
 	containerUploadRegEx = regexp.MustCompile("/containers/(.+)/archive")
+	waitUploadRegEx      = regexp.MustCompile("/containers/(.+)/wait")
 )
 
 var peerEndpoints map[string]string
@@ -118,9 +119,9 @@ func launchChaincode(ccParams *chaincodeParams, tlsPath string, done chan struct
 }
 
 func createChaincodeCmd(ccParams *chaincodeParams, tlsPath string) *exec.Cmd {
-	rootCertFile := path.Join(tlsPath, "peer.crt")
-	keyPath := path.Join(tlsPath, "client.key")
-	certPath := path.Join(tlsPath, "client.crt")
+	rootCertFile := filepath.Join(tlsPath, "peer.crt")
+	keyPath := filepath.Join(tlsPath, "client.key")
+	certPath := filepath.Join(tlsPath, "client.crt")
 
 	cmd := exec.Command(ccParams.chaincodeBinary(), tlsPath)
 	cmd.Stderr = os.Stderr
@@ -205,7 +206,7 @@ func (d *chaincoded) handleUploadToContainerRequest(w http.ResponseWriter, r *ht
 		return
 	}
 
-	tlsPath := path.Join(tmpDir, "etc", "hyperledger", "fabric")
+	tlsPath := filepath.Join(tmpDir, "etc", "hyperledger", "fabric")
 	d.wg.Add(1)
 	go func() {
 		defer d.wg.Done()
@@ -241,6 +242,10 @@ func (d *chaincoded) handleOtherRequest(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(200)
 }
 
+func (d *chaincoded) handleWaitRequest(w http.ResponseWriter, r *http.Request) {
+	select {}
+}
+
 func randomHexString(len int) string {
 	b := make([]byte, len)
 	rand.Read(b)
@@ -266,7 +271,7 @@ func extractArchive(in io.Reader, basePath string) error {
 
 		switch hdr.Typeflag {
 		case tar.TypeDir:
-			outPath := path.Join(basePath, hdr.Name)
+			outPath := filepath.Join(basePath, hdr.Name)
 
 			if err := os.Mkdir(outPath, 0755); err != nil {
 				return err
@@ -274,9 +279,9 @@ func extractArchive(in io.Reader, basePath string) error {
 		case 0:
 			fallthrough
 		case tar.TypeReg:
-			outPath := path.Join(basePath, hdr.Name)
+			outPath := filepath.Join(basePath, hdr.Name)
 
-			dir := path.Dir(outPath)
+			dir := filepath.Dir(outPath)
 			if err := os.MkdirAll(dir, 0755); err != nil {
 				return err
 			}
@@ -299,6 +304,7 @@ func (d *chaincoded) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	startMatches := containerStartRegEx.FindStringSubmatch(r.URL.Path)
 	uploadMatches := containerUploadRegEx.FindStringSubmatch(r.URL.Path)
 	createMatches := containerCreateRegEx.FindStringSubmatch(r.URL.Path)
+	waitMatches := waitUploadRegEx.FindStringSubmatch(r.URL.Path)
 
 	logDebugf("Handling HTTP request [%s]", r.URL)
 	if startMatches != nil {
@@ -307,6 +313,9 @@ func (d *chaincoded) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		d.handleUploadToContainerRequest(w, r, uploadMatches[1])
 	} else if createMatches != nil {
 		d.handleCreateContainerRequest(w, r)
+	} else if waitMatches != nil {
+		logDebugf("Handling handleWaitRequest")
+		d.handleWaitRequest(w, r)
 	} else {
 		d.handleOtherRequest(w, r)
 	}

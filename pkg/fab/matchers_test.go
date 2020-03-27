@@ -7,9 +7,11 @@ SPDX-License-Identifier: Apache-2.0
 package fab
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/hyperledger/fabric-sdk-go/test/metadata"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/core"
@@ -18,12 +20,13 @@ import (
 )
 
 const (
-	sampleMatchersOverrideAll      = "../core/config/testdata/matcher-samples/matchers_sample1.yaml"
-	sampleMatchersOverridePartial  = "../core/config/testdata/matcher-samples/matchers_sample2.yaml"
-	sampleMatchersURLMapping       = "../core/config/testdata/matcher-samples/matchers_sample3.yaml"
-	sampleMatchersHostNameOverride = "../core/config/testdata/matcher-samples/matchers_sample4.yaml"
-	sampleMatchersDefaultConfigs   = "../core/config/testdata/matcher-samples/matchers_sample5.yaml"
-	sampleMatchersIgnoreEndpoint   = "../core/config/testdata/matcher-samples/matchers_sample6.yaml"
+	sampleMatchersOverrideAll      = "matchers_sample1.yaml"
+	sampleMatchersOverridePartial  = "matchers_sample2.yaml"
+	sampleMatchersURLMapping       = "matchers_sample3.yaml"
+	sampleMatchersHostNameOverride = "matchers_sample4.yaml"
+	sampleMatchersDefaultConfigs   = "matchers_sample5.yaml"
+	sampleMatchersIgnoreEndpoint   = "matchers_sample6.yaml"
+	matchersDir                    = "matcher-samples"
 
 	actualPeerURL                 = "peer0.org1.example.com:7051"
 	actualPeerHostNameOverride    = "peer0.org1.example.com"
@@ -38,13 +41,19 @@ const (
 	testChannelID = "matcherchannel"
 )
 
+func getConfigPath() string {
+	return filepath.Join(metadata.GetProjectPath(), "pkg", "core", "config", "testdata")
+}
+
 //TestAllOptionsOverride
 //Scenario: Actual peer/orderer config are overridden using entity matchers.
 // Endpoint config matches given URL/name with all available entity matcher patterns first to get the
 //overrided values, rest of the options are fetched from mapped host.
 //If no entity matcher provided, then it falls back to exact match in endpoint configuration.
 func TestAllOptionsOverride(t *testing.T) {
-	backends, err := getBackendsFromFiles(sampleMatchersOverrideAll, configTestFilePath)
+	matcherPath := filepath.Join(getConfigPath(), matchersDir, sampleMatchersOverrideAll)
+	configPath := filepath.Join(getConfigPath(), configTestFile)
+	backends, err := getBackendsFromFiles(matcherPath, configPath)
 	assert.Nil(t, err, "not supposed to get error")
 	assert.Equal(t, 2, len(backends))
 
@@ -67,15 +76,17 @@ func TestAllOptionsOverride(t *testing.T) {
 	assert.Equal(t, 6, len(peerConfig.GRPCOptions))
 
 	//OrdererConfig Search Based on URL configured in config
-	ordererConfig, ok := config.OrdererConfig("orderer.example.com:7051")
+	ordererConfig, ok, ignoreOrderer := config.OrdererConfig("orderer.example.com:7051")
 	assert.True(t, ok, "supposed to find orderer config")
+	assert.False(t, ignoreOrderer, "orderer must not be ignored")
 	assert.Equal(t, overridedOrdererURL, ordererConfig.URL)
 	assert.Equal(t, overridedOrdererHostNameOverride, ordererConfig.GRPCOptions["ssl-target-name-override"])
 	assert.Equal(t, 6, len(ordererConfig.GRPCOptions))
 
 	//OrdererConfig Search Based on Name configured in config
-	ordererConfig, ok = config.OrdererConfig("orderer.example.com")
+	ordererConfig, ok, ignoreOrderer = config.OrdererConfig("orderer.example.com")
 	assert.True(t, ok, "supposed to find orderer config")
+	assert.False(t, ignoreOrderer, "orderer must not be ignored")
 	assert.Equal(t, overridedOrdererURL, ordererConfig.URL)
 	assert.Equal(t, overridedOrdererHostNameOverride, ordererConfig.GRPCOptions["ssl-target-name-override"])
 	assert.Equal(t, 6, len(ordererConfig.GRPCOptions))
@@ -90,7 +101,9 @@ func TestAllOptionsOverride(t *testing.T) {
 //Scenario: Entity matchers overriding only few options (URLs) in Peer/Orderer config. Options which are not overridden
 // are fetched from mapped host entity.
 func TestPartialOptionsOverride(t *testing.T) {
-	backends, err := getBackendsFromFiles(sampleMatchersOverridePartial, configTestFilePath)
+	configPath := filepath.Join(getConfigPath(), configTestFile)
+	matcherPath := filepath.Join(getConfigPath(), matchersDir, sampleMatchersOverridePartial)
+	backends, err := getBackendsFromFiles(matcherPath, configPath)
 	assert.Nil(t, err, "not supposed to get error")
 	assert.Equal(t, 2, len(backends))
 
@@ -113,15 +126,17 @@ func TestPartialOptionsOverride(t *testing.T) {
 	assert.Equal(t, 6, len(peerConfig.GRPCOptions))
 
 	//OrdererConfig Search Based on URL configured in config
-	ordererConfig, ok := config.OrdererConfig("orderer.example.com:7051")
+	ordererConfig, ok, ignoreOrderer := config.OrdererConfig("orderer.example.com:7051")
 	assert.True(t, ok, "supposed to find orderer config")
+	assert.False(t, ignoreOrderer, "orderer must not be ignored")
 	assert.Equal(t, overridedOrdererURL, ordererConfig.URL)
 	assert.Equal(t, actualOrdererHostNameOverride, ordererConfig.GRPCOptions["ssl-target-name-override"])
 	assert.Equal(t, 6, len(ordererConfig.GRPCOptions))
 
 	//OrdererConfig Search Based on Name configured in config
-	ordererConfig, ok = config.OrdererConfig("orderer.example.com")
+	ordererConfig, ok, ignoreOrderer = config.OrdererConfig("orderer.example.com")
 	assert.True(t, ok, "supposed to find orderer config")
+	assert.False(t, ignoreOrderer, "orderer must not be ignored")
 	assert.Equal(t, overridedOrdererURL, ordererConfig.URL)
 	assert.Equal(t, actualOrdererHostNameOverride, ordererConfig.GRPCOptions["ssl-target-name-override"])
 	assert.Equal(t, 6, len(ordererConfig.GRPCOptions))
@@ -132,7 +147,9 @@ func TestPartialOptionsOverride(t *testing.T) {
 //Scenario: Entity matchers overriding only few options(hostname overrides) in Peer/Orderer config. Options which are not overridden
 // are fetched from mapped host entity.
 func TestOnlyHostNameOptionsOverride(t *testing.T) {
-	backends, err := getBackendsFromFiles(sampleMatchersHostNameOverride, configTestFilePath)
+	configPath := filepath.Join(getConfigPath(), configTestFile)
+	matcherPath := filepath.Join(getConfigPath(), matchersDir, sampleMatchersHostNameOverride)
+	backends, err := getBackendsFromFiles(matcherPath, configPath)
 	assert.Nil(t, err, "not supposed to get error")
 	assert.Equal(t, 2, len(backends))
 
@@ -155,15 +172,17 @@ func TestOnlyHostNameOptionsOverride(t *testing.T) {
 	assert.Equal(t, 6, len(peerConfig.GRPCOptions))
 
 	//OrdererConfig Search Based on URL configured in config
-	ordererConfig, ok := config.OrdererConfig("orderer.example.com:7051")
+	ordererConfig, ok, ignoreOrderer := config.OrdererConfig("orderer.example.com:7051")
 	assert.True(t, ok, "supposed to find orderer config")
+	assert.False(t, ignoreOrderer, "orderer must not be ignored")
 	assert.Equal(t, actualOrdererURL, ordererConfig.URL)
 	assert.Equal(t, overridedOrdererHostNameOverride, ordererConfig.GRPCOptions["ssl-target-name-override"])
 	assert.Equal(t, 6, len(ordererConfig.GRPCOptions))
 
 	//OrdererConfig Search Based on Name configured in config
-	ordererConfig, ok = config.OrdererConfig("orderer.example.com")
+	ordererConfig, ok, ignoreOrderer = config.OrdererConfig("orderer.example.com")
 	assert.True(t, ok, "supposed to find orderer config")
+	assert.False(t, ignoreOrderer, "orderer must not be ignored")
 	assert.Equal(t, actualOrdererURL, ordererConfig.URL)
 	assert.Equal(t, overridedOrdererHostNameOverride, ordererConfig.GRPCOptions["ssl-target-name-override"])
 	assert.Equal(t, 6, len(ordererConfig.GRPCOptions))
@@ -173,7 +192,9 @@ func TestOnlyHostNameOptionsOverride(t *testing.T) {
 //TestURLMapping
 //Scenario:  A URL based entity pattern is used to return config entities with customized URLs, host overrides etc
 func TestURLMapping(t *testing.T) {
-	backends, err := getBackendsFromFiles(sampleMatchersURLMapping, configTestFilePath)
+	configPath := filepath.Join(getConfigPath(), configTestFile)
+	matcherPath := filepath.Join(getConfigPath(), matchersDir, sampleMatchersURLMapping)
+	backends, err := getBackendsFromFiles(matcherPath, configPath)
 	assert.Nil(t, err, "not supposed to get error")
 	assert.Equal(t, 2, len(backends))
 
@@ -189,8 +210,9 @@ func TestURLMapping(t *testing.T) {
 	assert.Equal(t, 6, len(peerConfig.GRPCOptions))
 
 	//OrdererConfig Search Based on URL configured in config
-	ordererConfig, ok := config.OrdererConfig("my.org.exampleX.com:1234")
+	ordererConfig, ok, ignoreOrderer := config.OrdererConfig("my.org.exampleX.com:1234")
 	assert.True(t, ok, "supposed to find orderer config")
+	assert.False(t, ignoreOrderer, "orderer must not be ignored")
 	assert.Equal(t, overridedOrdererURL, ordererConfig.URL)
 	assert.Equal(t, overridedOrdererHostNameOverride, ordererConfig.GRPCOptions["ssl-target-name-override"])
 	assert.Equal(t, 6, len(ordererConfig.GRPCOptions))
@@ -209,8 +231,9 @@ func TestURLMapping(t *testing.T) {
 	assert.Equal(t, 6, len(peerConfig.GRPCOptions))
 
 	//OrdererConfig Search Based on URL configured in config (using $ in entity matchers)
-	ordererConfig, ok = config.OrdererConfig("orderer.exampleY.com:1234")
+	ordererConfig, ok, ignoreOrderer = config.OrdererConfig("orderer.exampleY.com:1234")
 	assert.True(t, ok, "supposed to find orderer config")
+	assert.False(t, ignoreOrderer, "orderer must not be ignored")
 	assert.Equal(t, overridedOrdererURL, ordererConfig.URL)
 	assert.Equal(t, overridedOrdererHostNameOverride, ordererConfig.GRPCOptions["ssl-target-name-override"])
 	assert.Equal(t, 6, len(ordererConfig.GRPCOptions))
@@ -218,7 +241,9 @@ func TestURLMapping(t *testing.T) {
 }
 
 func TestPeerMatchersWithDefaults(t *testing.T) {
-	backends, err := getBackendsFromFiles(sampleMatchersDefaultConfigs, configTestFilePath)
+	configPath := filepath.Join(getConfigPath(), configTestFile)
+	matcherPath := filepath.Join(getConfigPath(), matchersDir, sampleMatchersDefaultConfigs)
+	backends, err := getBackendsFromFiles(matcherPath, configPath)
 	assert.Nil(t, err, "not supposed to get error")
 	assert.Equal(t, 2, len(backends))
 
@@ -263,7 +288,9 @@ func TestPeerMatchersWithDefaults(t *testing.T) {
 }
 
 func TestOrdererMatchersWithDefaults(t *testing.T) {
-	backends, err := getBackendsFromFiles(sampleMatchersDefaultConfigs, configTestFilePath)
+	configPath := filepath.Join(getConfigPath(), configTestFile)
+	matcherPath := filepath.Join(getConfigPath(), matchersDir, sampleMatchersDefaultConfigs)
+	backends, err := getBackendsFromFiles(matcherPath, configPath)
 	assert.Nil(t, err, "not supposed to get error")
 	assert.Equal(t, 2, len(backends))
 
@@ -272,8 +299,9 @@ func TestOrdererMatchersWithDefaults(t *testing.T) {
 	assert.NotNil(t, config)
 
 	//OrdererConfig Search Based on matching URL,
-	ordererConfig, ok := config.OrdererConfig("XYZ.org.example.com:1234")
+	ordererConfig, ok, ignoreOrderer := config.OrdererConfig("XYZ.org.example.com:1234")
 	assert.True(t, ok, "supposed to find orderer config")
+	assert.False(t, ignoreOrderer, "orderer must not be ignored")
 	assert.Equal(t, overridedOrdererURL, ordererConfig.URL)
 	assert.Equal(t, overridedOrdererHostNameOverride, ordererConfig.GRPCOptions["ssl-target-name-override"])
 	assert.NotNil(t, ordererConfig.TLSCACert)
@@ -281,8 +309,9 @@ func TestOrdererMatchersWithDefaults(t *testing.T) {
 
 	//PeerConfig Search Based on matching URL, using regex replace pattern (unknown pattern)
 	//it shouldn't fail since default peer config will be picked for unknown mapped host
-	ordererConfig, ok = config.OrdererConfig("ordABC.replace.example.com:1234")
+	ordererConfig, ok, ignoreOrderer = config.OrdererConfig("ordABC.replace.example.com:1234")
 	assert.True(t, ok, "supposed to find orderer config")
+	assert.False(t, ignoreOrderer, "orderer must not be ignored")
 	assert.Equal(t, "ordABC.example.com:1234", ordererConfig.URL)
 	assert.Equal(t, "ordABC.override.com", ordererConfig.GRPCOptions["ssl-target-name-override"])
 	assert.NotNil(t, ordererConfig.TLSCACert)
@@ -290,8 +319,9 @@ func TestOrdererMatchersWithDefaults(t *testing.T) {
 
 	//PeerConfig Search Based on matching URL, where mapped host is missing
 	//it shouldn't fail since default peer config will be picked for unknown mapped host
-	ordererConfig, ok = config.OrdererConfig("ordABC.missing.example.com:1234")
+	ordererConfig, ok, ignoreOrderer = config.OrdererConfig("ordABC.missing.example.com:1234")
 	assert.True(t, ok, "supposed to find orderer config")
+	assert.False(t, ignoreOrderer, "orderer must not be ignored")
 	assert.Equal(t, overridedOrdererURL, ordererConfig.URL)
 	assert.Equal(t, overridedOrdererHostNameOverride, ordererConfig.GRPCOptions["ssl-target-name-override"])
 	assert.NotNil(t, ordererConfig.TLSCACert)
@@ -299,8 +329,9 @@ func TestOrdererMatchersWithDefaults(t *testing.T) {
 
 	//PeerConfig Search Based on matching URL, where non existing mapped host is used
 	//it shouldn't fail since default peer config will be picked for unknown mapped host
-	ordererConfig, ok = config.OrdererConfig("ordABC.random.example.com:1234")
+	ordererConfig, ok, ignoreOrderer = config.OrdererConfig("ordABC.random.example.com:1234")
 	assert.True(t, ok, "supposed to find orderer config")
+	assert.False(t, ignoreOrderer, "orderer must not be ignored")
 	assert.Equal(t, overridedOrdererURL, ordererConfig.URL)
 	assert.Equal(t, overridedOrdererHostNameOverride, ordererConfig.GRPCOptions["ssl-target-name-override"])
 	assert.NotNil(t, ordererConfig.TLSCACert)
@@ -346,7 +377,9 @@ func getBackendsFromFiles(files ...string) ([]core.ConfigBackend, error) {
 
 //TestDefaultPeerForNonExistingURL tests default peerConfig result for search by URL scenario
 func TestDefaultPeerForNonExistingURL(t *testing.T) {
-	backends, err := getBackendsFromFiles(sampleMatchersDefaultConfigs, configTestFilePath)
+	configPath := filepath.Join(getConfigPath(), configTestFile)
+	matcherPath := filepath.Join(getConfigPath(), matchersDir, sampleMatchersDefaultConfigs)
+	backends, err := getBackendsFromFiles(matcherPath, configPath)
 	assert.Nil(t, err, "not supposed to get error")
 	assert.Equal(t, 2, len(backends))
 
@@ -386,7 +419,9 @@ func TestDefaultPeerForNonExistingURL(t *testing.T) {
 
 //TestDefaultOrdererForNonExistingURL tests default ordererConfig result for search by URL scenario
 func TestDefaultOrdererForNonExistingURL(t *testing.T) {
-	backends, err := getBackendsFromFiles(sampleMatchersDefaultConfigs, configTestFilePath)
+	configPath := filepath.Join(getConfigPath(), configTestFile)
+	matcherPath := filepath.Join(getConfigPath(), matchersDir, sampleMatchersDefaultConfigs)
+	backends, err := getBackendsFromFiles(matcherPath, configPath)
 	assert.Nil(t, err, "not supposed to get error")
 	assert.Equal(t, 2, len(backends))
 
@@ -395,8 +430,9 @@ func TestDefaultOrdererForNonExistingURL(t *testing.T) {
 	assert.NotNil(t, config)
 
 	//PeerConfig Search Based on unmatched URL, default peerconfig with searchkey as URL should be returned
-	ordererConfig, ok := config.OrdererConfig("ABC.XYZ:2222")
+	ordererConfig, ok, ignoreOrderer := config.OrdererConfig("ABC.XYZ:2222")
 	assert.True(t, ok, "supposed to find peer config")
+	assert.False(t, ignoreOrderer, "orderer must not be ignored")
 	assert.Equal(t, "ABC.XYZ:2222", ordererConfig.URL)
 	assert.Equal(t, nil, ordererConfig.GRPCOptions["ssl-target-name-override"])
 	assert.NotNil(t, ordererConfig.TLSCACert)
@@ -437,7 +473,9 @@ func TestDefaultOrdererForNonExistingURL(t *testing.T) {
 func TestMatchersIgnoreEndpoint(t *testing.T) {
 
 	//prepare backends for test
-	backends, err := getBackendsFromFiles(sampleMatchersIgnoreEndpoint, configTestFilePath)
+	configPath := filepath.Join(getConfigPath(), configTestFile)
+	matcherPath := filepath.Join(getConfigPath(), matchersDir, sampleMatchersIgnoreEndpoint)
+	backends, err := getBackendsFromFiles(matcherPath, configPath)
 	assert.Nil(t, err, "not supposed to get error")
 	assert.Equal(t, 2, len(backends))
 
@@ -567,39 +605,47 @@ func testIgnoreEndpointOrdererSearch(t *testing.T, config fab.EndpointConfig) {
 
 	//Test if orderer excluded in orderer search by name
 
-	ordererConfig, ok := config.OrdererConfig("orderer.exclude.example.com")
+	ordererConfig, ok, ignoreOrderer:= config.OrdererConfig("orderer.exclude.example.com")
 	assert.False(t, ok)
+	assert.True(t, ignoreOrderer, "orderer must be excluded")
 	assert.Nil(t, ordererConfig)
 
-	ordererConfig, ok = config.OrdererConfig("orderer.exclude.example.com")
+	ordererConfig, ok, ignoreOrderer = config.OrdererConfig("orderer.exclude.example.com")
 	assert.False(t, ok)
+	assert.True(t, ignoreOrderer, "orderer must be excluded")
 	assert.Nil(t, ordererConfig)
 
-	ordererConfig, ok = config.OrdererConfig("orderer.example.com")
+	ordererConfig, ok, ignoreOrderer = config.OrdererConfig("orderer.example.com")
 	assert.True(t, ok)
+	assert.False(t, ignoreOrderer, "orderer must not be excluded")
 	assert.NotNil(t, ordererConfig)
 
-	ordererConfig, ok = config.OrdererConfig("orderer.example.com")
+	ordererConfig, ok, ignoreOrderer = config.OrdererConfig("orderer.example.com")
 	assert.True(t, ok)
+	assert.False(t, ignoreOrderer, "orderer must not be excluded")
 	assert.NotNil(t, ordererConfig)
 
 	//Test if orderer excluded in orderer search by URL
 
-	ordererConfig, ok = config.OrdererConfig("orderer.exclude.example.com:8050")
+	ordererConfig, ok, ignoreOrderer = config.OrdererConfig("orderer.exclude.example.com:8050")
 	assert.False(t, ok)
+	assert.True(t, ignoreOrderer, "orderer must be excluded")
 	assert.Nil(t, ordererConfig)
 
-	ordererConfig, ok = config.OrdererConfig("orderer.exclude.example.com:8050")
+	ordererConfig, ok, ignoreOrderer = config.OrdererConfig("orderer.exclude.example.com:8050")
 	assert.False(t, ok)
+	assert.True(t, ignoreOrderer, "orderer must be excluded")
 	assert.Nil(t, ordererConfig)
 
 	//arbitrary URLs
-	ordererConfig, ok = config.OrdererConfig("orderer.exclude.example.com:1234")
+	ordererConfig, ok, ignoreOrderer = config.OrdererConfig("orderer.exclude.example.com:1234")
 	assert.False(t, ok)
+	assert.True(t, ignoreOrderer, "orderer must be excluded")
 	assert.Nil(t, ordererConfig)
 
-	ordererConfig, ok = config.OrdererConfig("orderer.exclude.example.com:4321")
+	ordererConfig, ok, ignoreOrderer = config.OrdererConfig("orderer.exclude.example.com:4321")
 	assert.False(t, ok)
+	assert.True(t, ignoreOrderer, "orderer must be excluded")
 	assert.Nil(t, ordererConfig)
 
 }

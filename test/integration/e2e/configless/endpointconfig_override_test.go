@@ -40,7 +40,7 @@ import (
 //       Make sure your local /etc/hosts file does not have any ip-dns mapping entries for peers/orderers/CAs
 //
 //       2. the test assumes the use of the default channel block used in the remaining regular integration tests (for example look at Orderer.Addresses value in
-//       test/fixtures/fabric/..specific target fabric release../config/configtx.yaml to see the URL value assigned to the orderer for a specific channel).
+//       test/fixtures/fabric/<specific target fabric release>/config/configtx.yaml to see the URL value assigned to the orderer for a specific channel).
 //       So Even if the below interfaces will override orderers to localhost for TEST_LOCAL=true, the SDK will still try
 //       to create an orderer with the URL found in the channel block mentioned above. You can either create another channel block for your channels,
 //       or if you want to use an existing channel block but still want to change the orderer URL, then you can implement EntityMatchers logic for your orderers
@@ -59,6 +59,7 @@ type clientConfig struct {
 
 // caConfig defines a CA configuration in identity config
 type caConfig struct {
+	ID         string
 	URL        string
 	TLSCACerts endpoint.MutualTLSConfig
 	Registrar  msp.EnrollCredentials
@@ -71,11 +72,11 @@ var (
 	client       = clientConfig{
 		Organization:    "org1",
 		Logging:         api.LoggingType{Level: "info"},
-		CryptoConfig:    msp.CCType{Path: pathvar.Subst("${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/${CRYPTOCONFIG_FIXTURES_PATH}")},
+		CryptoConfig:    msp.CCType{Path: pathvar.Subst("${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}")},
 		CredentialStore: msp.CredentialStoreType{Path: "/tmp/msp"},
 		TLSCerts: endpoint.MutualTLSConfig{Client: endpoint.TLSKeyPair{
-			Key:  newTLSConfig("${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.key"),
-			Cert: newTLSConfig("${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.crt")}},
+			Key:  newTLSConfig("${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.key"),
+			Cert: newTLSConfig("${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.crt")}},
 	}
 
 	channelsConfig = map[string]fab.ChannelEndpointConfig{
@@ -141,15 +142,15 @@ var (
 	}
 	orgsConfig = map[string]fab.OrganizationConfig{
 		"org1": {
-			MSPID:      "Org1MSP",
-			CryptoPath: "peerOrganizations/org1.example.com/users/{username}@org1.example.com/msp",
-			Peers:      []string{"peer0.org1.example.com"},
+			MSPID:                  "Org1MSP",
+			CryptoPath:             "peerOrganizations/org1.example.com/users/{username}@org1.example.com/msp",
+			Peers:                  []string{"peer0.org1.example.com"},
 			CertificateAuthorities: []string{"ca.org1.example.com"},
 		},
 		"org2": {
-			MSPID:      "Org2MSP",
-			CryptoPath: "peerOrganizations/org1.example.com/users/{username}@org2.example.com/msp",
-			Peers:      []string{"peer0.org2.example.com"},
+			MSPID:                  "Org2MSP",
+			CryptoPath:             "peerOrganizations/org1.example.com/users/{username}@org2.example.com/msp",
+			Peers:                  []string{"peer0.org2.example.com"},
 			CertificateAuthorities: []string{"ca.org2.example.com"},
 		},
 		"ordererorg": {
@@ -169,7 +170,7 @@ var (
 				"fail-fast":                false,
 				"allow-insecure":           false,
 			},
-			TLSCACert: tlsCertByBytes("${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/${CRYPTOCONFIG_FIXTURES_PATH}/ordererOrganizations/example.com/tlsca/tlsca.example.com-cert.pem"),
+			TLSCACert: tlsCertByBytes("${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/ordererOrganizations/example.com/tlsca/tlsca.example.com-cert.pem"),
 		},
 	}
 
@@ -184,7 +185,7 @@ var (
 				"fail-fast":                false,
 				"allow-insecure":           false,
 			},
-			TLSCACert: tlsCertByBytes("${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/org1.example.com/tlsca/tlsca.org1.example.com-cert.pem"),
+			TLSCACert: tlsCertByBytes("${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/org1.example.com/tlsca/tlsca.org1.example.com-cert.pem"),
 		},
 		"peer0.org2.example.com": {
 			URL: "peer0.org2.example.com:8051",
@@ -196,7 +197,7 @@ var (
 				"fail-fast":                false,
 				"allow-insecure":           false,
 			},
-			TLSCACert: tlsCertByBytes("${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/org2.example.com/tlsca/tlsca.org2.example.com-cert.pem"),
+			TLSCACert: tlsCertByBytes("${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/org2.example.com/tlsca/tlsca.org2.example.com-cert.pem"),
 		},
 	}
 
@@ -211,7 +212,7 @@ var (
 				"fail-fast":                false,
 				"allow-insecure":           false,
 			},
-			TLSCACert: tlsCertByBytes("${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/org1.example.com/tlsca/tlsca.org1.example.com-cert.pem"),
+			TLSCACert: tlsCertByBytes("${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/org1.example.com/tlsca/tlsca.org1.example.com-cert.pem"),
 		},
 		"localhost:8051": {
 			URL: "localhost:8051",
@@ -223,18 +224,19 @@ var (
 				"fail-fast":                false,
 				"allow-insecure":           false,
 			},
-			TLSCACert: tlsCertByBytes("${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/org2.example.com/tlsca/tlsca.org2.example.com-cert.pem"),
+			TLSCACert: tlsCertByBytes("${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/org2.example.com/tlsca/tlsca.org2.example.com-cert.pem"),
 		},
 	}
 
 	caConfigObj = map[string]caConfig{
 		"ca.org1.example.com": {
+			ID:  "ca.org1.example.com",
 			URL: "https://ca.org1.example.com:7054",
 			TLSCACerts: endpoint.MutualTLSConfig{
-				Path: pathvar.Subst("${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/org1.example.com/tlsca/tlsca.org1.example.com-cert.pem"),
+				Path: pathvar.Subst("${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/org1.example.com/tlsca/tlsca.org1.example.com-cert.pem"),
 				Client: endpoint.TLSKeyPair{
-					Key:  newTLSConfig("${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.key"),
-					Cert: newTLSConfig("${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.crt"),
+					Key:  newTLSConfig("${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.key"),
+					Cert: newTLSConfig("${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.crt"),
 				},
 			},
 			Registrar: msp.EnrollCredentials{
@@ -244,12 +246,13 @@ var (
 			CAName: "ca.org1.example.com",
 		},
 		"ca.org2.example.com": {
+			ID:  "ca.org2.example.com",
 			URL: "https://ca.org2.example.com:8054",
 			TLSCACerts: endpoint.MutualTLSConfig{
-				Path: pathvar.Subst("${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/org2.example.com/tlsca/tlsca.org2.example.com-cert.pem"),
+				Path: pathvar.Subst("${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/org2.example.com/tlsca/tlsca.org2.example.com-cert.pem"),
 				Client: endpoint.TLSKeyPair{
-					Key:  newTLSConfig("${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.key"),
-					Cert: newTLSConfig("${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.crt"),
+					Key:  newTLSConfig("${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.key"),
+					Cert: newTLSConfig("${FABRIC_SDK_GO_PROJECT_PATH}/${CRYPTOCONFIG_FIXTURES_PATH}/peerOrganizations/tls.example.com/users/User1@tls.example.com/tls/client.crt"),
 				},
 			},
 			Registrar: msp.EnrollCredentials{
@@ -435,7 +438,7 @@ func (m *exampleOrderersConfig) OrderersConfig() []fab.OrdererConfig {
 type exampleOrdererConfig struct{}
 
 //OrdererConfig overrides EndpointConfig's OrdererConfig function which returns the ordererConfig instance for the name/URL arg
-func (m *exampleOrdererConfig) OrdererConfig(ordererNameOrURL string) (*fab.OrdererConfig, bool) {
+func (m *exampleOrdererConfig) OrdererConfig(ordererNameOrURL string) (*fab.OrdererConfig, bool, bool) {
 	orderer, ok := networkConfig.Orderers[strings.ToLower(ordererNameOrURL)]
 	if !ok {
 		// EntityMatchers are not used in this implementation, below is an example of how to use them if needed, see default implementation for live example
@@ -444,10 +447,10 @@ func (m *exampleOrdererConfig) OrdererConfig(ordererNameOrURL string) (*fab.Orde
 		//	return nil, errors.WithStack(status.New(status.ClientStatus, status.NoMatchingOrdererEntity.ToInt32(), "no matching orderer config found", nil))
 		//}
 		//orderer = *matchingOrdererConfig
-		return nil, false
+		return nil, false, false
 	}
 
-	return &orderer, true
+	return &orderer, true, false
 }
 
 type examplePeersConfig struct {
@@ -675,7 +678,7 @@ func (m *exampleChannelOrderers) ChannelOrderers(channelName string) []fab.Order
 	channel := chCfg.ChannelConfig(channelName)
 
 	for _, chOrderer := range channel.Orderers {
-		orderer, ok := oCfg.OrdererConfig(chOrderer)
+		orderer, ok, _ := oCfg.OrdererConfig(chOrderer)
 		if !ok || orderer == nil {
 			return nil
 		}

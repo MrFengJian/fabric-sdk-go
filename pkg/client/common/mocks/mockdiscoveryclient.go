@@ -10,9 +10,10 @@ import (
 	reqcontext "context"
 	"sync"
 
+	"github.com/hyperledger/fabric-protos-go/discovery"
+	"github.com/hyperledger/fabric-protos-go/gossip"
 	discclient "github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/discovery/client"
-	"github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/protos/discovery"
-	"github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/protos/gossip"
+	gprotoext "github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/gossip/protoext"
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/fab"
 	fabdiscovery "github.com/hyperledger/fabric-sdk-go/pkg/fab/discovery"
 	discmocks "github.com/hyperledger/fabric-sdk-go/pkg/fab/discovery/mocks"
@@ -35,7 +36,7 @@ func NewMockDiscoveryClient() *MockDiscoveryClient {
 }
 
 // Send sends a Discovery request
-func (m *MockDiscoveryClient) Send(ctx reqcontext.Context, req *discclient.Request, targets ...fab.PeerConfig) ([]fabdiscovery.Response, error) {
+func (m *MockDiscoveryClient) Send(ctx reqcontext.Context, req *fabdiscovery.Request, targets ...fab.PeerConfig) ([]fabdiscovery.Response, error) {
 	return m.responses(), nil
 }
 
@@ -81,6 +82,7 @@ func (r *response) ForChannel(string) discclient.ChannelResponse {
 func (r *response) ForLocal() discclient.LocalResponse {
 	return &localResponse{
 		peers: r.peers,
+		err:   r.err,
 	}
 }
 
@@ -109,11 +111,12 @@ func (cr *channelResponse) Endorsers(invocationChain discclient.InvocationChain,
 
 type localResponse struct {
 	peers []*discclient.Peer
+	err   error
 }
 
 // Peers returns a response for a peer membership query, or error if something went wrong
 func (cr *localResponse) Peers() ([]*discclient.Peer, error) {
-	return cr.peers, nil
+	return cr.peers, cr.err
 }
 
 // MockDiscoverEndpointResponse contains a mock response for the discover client
@@ -143,8 +146,8 @@ func (b *MockDiscoverEndpointResponse) Build() fabdiscovery.Response {
 	}
 }
 
-func newAliveMessage(endpoint *discmocks.MockDiscoveryPeerEndpoint) *gossip.SignedGossipMessage {
-	return &gossip.SignedGossipMessage{
+func newAliveMessage(endpoint *discmocks.MockDiscoveryPeerEndpoint) *gprotoext.SignedGossipMessage {
+	return &gprotoext.SignedGossipMessage{
 		GossipMessage: &gossip.GossipMessage{
 			Content: &gossip.GossipMessage_AliveMsg{
 				AliveMsg: &gossip.AliveMessage{
@@ -157,8 +160,8 @@ func newAliveMessage(endpoint *discmocks.MockDiscoveryPeerEndpoint) *gossip.Sign
 	}
 }
 
-func newStateInfoMessage(endpoint *discmocks.MockDiscoveryPeerEndpoint) *gossip.SignedGossipMessage {
-	return &gossip.SignedGossipMessage{
+func newStateInfoMessage(endpoint *discmocks.MockDiscoveryPeerEndpoint) *gprotoext.SignedGossipMessage {
+	return &gprotoext.SignedGossipMessage{
 		GossipMessage: &gossip.GossipMessage{
 			Content: &gossip.GossipMessage_StateInfo{
 				StateInfo: &gossip.StateInfo{

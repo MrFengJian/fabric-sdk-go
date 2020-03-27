@@ -8,11 +8,13 @@ package discovery
 
 import (
 	"context"
+	"strings"
 	"sync"
 
+	"github.com/hyperledger/fabric-protos-go/discovery"
 	discclient "github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/discovery/client"
-	"github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/protos/discovery"
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/errors/multi"
+	"github.com/hyperledger/fabric-sdk-go/pkg/common/logging"
 	fabcontext "github.com/hyperledger/fabric-sdk-go/pkg/common/providers/context"
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/fab"
 	corecomm "github.com/hyperledger/fabric-sdk-go/pkg/core/config/comm"
@@ -20,6 +22,8 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
+
+var logger = logging.NewLogger("fabsdk/fab")
 
 const (
 	signerCacheSize = 10 // TODO: set an appropriate value (and perhaps make configurable)
@@ -55,7 +59,7 @@ type Response interface {
 // given set of peers. A set of successful responses is returned and/or an error
 // is returned from each of the peers that was unsuccessful (note that if more than one peer returned
 // an error then the returned error may be cast to multi.Errors).
-func (c *Client) Send(ctx context.Context, req *discclient.Request, targets ...fab.PeerConfig) ([]Response, error) {
+func (c *Client) Send(ctx context.Context, req *Request, targets ...fab.PeerConfig) ([]Response, error) {
 	if len(targets) == 0 {
 		return nil, errors.New("no targets specified")
 	}
@@ -67,19 +71,34 @@ func (c *Client) Send(ctx context.Context, req *discclient.Request, targets ...f
 	var responses []Response
 	var errs error
 
-	for _, target := range targets {
-		pconfig := target
-		go func() {
+	reqCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	for _, t := range targets {
+		go func(target fab.PeerConfig) {
 			defer wg.Done()
-			resp, err := c.send(ctx, req, pconfig)
+
+			targetCtx, cancelTarget := context.WithCancel(reqCtx)
+			defer cancelTarget()
+
+			resp, err := c.send(targetCtx, req.r, target)
 			lock.Lock()
 			if err != nil {
-				errs = multi.Append(errs, errors.WithMessage(err, "From target: "+pconfig.URL))
+				if !isContextCanceled(err) {
+					errs = multi.Append(errs, errors.WithMessage(err, "From target: "+target.URL))
+					logger.Debugf("... got discovery error response from [%s]: %s", target.URL, err)
+				} else {
+					logger.Debugf("... request to [%s] cancelled", target.URL)
+				}
 			} else {
-				responses = append(responses, &response{Response: resp, target: pconfig.URL})
+				responses = append(responses, &response{Response: resp, target: target.URL})
+				logger.Debugf("... got discovery response from [%s]", target.URL)
+
+				// Cancel all outstanding requests
+				cancel()
 			}
 			lock.Unlock()
-		}()
+		}(t)
 	}
 	wg.Wait()
 
@@ -89,6 +108,7 @@ func (c *Client) Send(ctx context.Context, req *discclient.Request, targets ...f
 func (c *Client) send(reqCtx context.Context, req *discclient.Request, target fab.PeerConfig) (discclient.Response, error) {
 	opts := comm.OptsFromPeerConfig(&target)
 	opts = append(opts, comm.WithConnectTimeout(c.ctx.EndpointConfig().Timeout(fab.DiscoveryConnection)))
+	opts = append(opts, comm.WithParentContext(reqCtx))
 
 	conn, err := comm.NewConnection(c.ctx, target.URL, opts...)
 	if err != nil {
@@ -133,4 +153,8 @@ func newAuthInfo(ctx fabcontext.Client) (*discovery.AuthInfo, error) {
 		ClientIdentity:    identity,
 		ClientTlsCertHash: hash,
 	}, nil
+}
+
+func isContextCanceled(err error) bool {
+	return strings.Contains(err.Error(), context.Canceled.Error())
 }

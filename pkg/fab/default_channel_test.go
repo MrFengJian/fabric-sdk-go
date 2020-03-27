@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package fab
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -19,7 +20,8 @@ import (
 func TestDefaultChannelWithDefaultChannelConfiguredAndNoMatchers(t *testing.T) {
 
 	// Default channel and no channel matchers test
-	defaultChannelBackend, err := config.FromFile(configEmbeddedUsersTestFilePath)()
+	configPath := filepath.Join(getConfigPath(), configEmbeddedUsersTestFile)
+	defaultChannelBackend, err := config.FromFile(configPath)()
 	assert.Nil(t, err, "Failed to get backend")
 
 	endpointConfig, err := ConfigFromBackend(defaultChannelBackend...)
@@ -33,6 +35,10 @@ func TestDefaultChannelWithDefaultChannelConfiguredAndNoMatchers(t *testing.T) {
 	assert.Equal(t, 3, chConfig.Policies.QueryChannelConfig.MaxTargets)
 	assert.Equal(t, 1, chConfig.Policies.Discovery.MinResponses)
 	assert.Equal(t, 3, chConfig.Policies.Discovery.MaxTargets)
+	assert.Equal(t, 2, chConfig.Policies.Discovery.RetryOpts.Attempts)
+	assert.Equal(t, 2*time.Second, chConfig.Policies.Discovery.RetryOpts.InitialBackoff)
+	assert.Equal(t, 7*time.Second, chConfig.Policies.Discovery.RetryOpts.MaxBackoff)
+	assert.Equal(t, 2, len(chConfig.Policies.Discovery.RetryOpts.RetryableCodes))
 
 	eventPolicies := chConfig.Policies.EventService
 	assert.Equalf(t, fab.BalancedStrategy, eventPolicies.ResolverStrategy, "Unexpected value for ResolverStrategy")
@@ -99,7 +105,9 @@ func TestDefaultChannelWithNoDefaultChannelConfiguredAndNoMatchers(t *testing.T)
 func TestDefaultChannelWithNoDefaultChannelConfiguredAndWithMatchers(t *testing.T) {
 
 	// Test no default channel + channel matchers
-	backends, err := getBackendsFromFiles(sampleMatchersOverrideAll, configTestFilePath)
+	matcherPath := filepath.Join(getConfigPath(), matchersDir, sampleMatchersOverrideAll)
+	configPath := filepath.Join(getConfigPath(), configTestFile)
+	backends, err := getBackendsFromFiles(matcherPath, configPath)
 	assert.Nil(t, err, "not supposed to get error")
 	assert.Equal(t, 2, len(backends))
 
@@ -138,7 +146,8 @@ func TestDefaultChannelWithNoDefaultChannelConfiguredAndWithMatchers(t *testing.
 func TestMissingPolicesInfo(t *testing.T) {
 
 	// Default channel and no channel matchers test
-	defaultChannelBackend, err := config.FromFile(configEmbeddedUsersTestFilePath)()
+	configPath := filepath.Join(getConfigPath(), configEmbeddedUsersTestFile)
+	defaultChannelBackend, err := config.FromFile(configPath)()
 	assert.Nil(t, err, "Failed to get backend")
 
 	endpointConfig, err := ConfigFromBackend(defaultChannelBackend...)
@@ -189,7 +198,8 @@ func TestMissingPolicesInfo(t *testing.T) {
 func TestMissingPartialChannelPoliciesInfo(t *testing.T) {
 
 	// Default channel and no channel matchers test
-	defaultChannelBackend, err := config.FromFile(configEmbeddedUsersTestFilePath)()
+	configPath := filepath.Join(getConfigPath(), configEmbeddedUsersTestFile)
+	defaultChannelBackend, err := config.FromFile(configPath)()
 	assert.Nil(t, err, "Failed to get backend")
 
 	endpointConfig, err := ConfigFromBackend(defaultChannelBackend...)
@@ -225,7 +235,8 @@ func TestMissingPartialChannelPoliciesInfo(t *testing.T) {
 func TestMissingPeersInfo(t *testing.T) {
 
 	// Default channel and no channel matchers test
-	defaultChannelBackend, err := config.FromFile(configEmbeddedUsersTestFilePath)()
+	configPath := filepath.Join(getConfigPath(), configEmbeddedUsersTestFile)
+	defaultChannelBackend, err := config.FromFile(configPath)()
 	assert.Nil(t, err, "Failed to get backend")
 
 	endpointConfig, err := ConfigFromBackend(defaultChannelBackend...)
@@ -271,7 +282,8 @@ func TestMissingPeersInfo(t *testing.T) {
 func TestMissingOrderersInfo(t *testing.T) {
 
 	// Default channel and no channel matchers test
-	defaultChannelBackend, err := config.FromFile(configEmbeddedUsersTestFilePath)()
+	configPath := filepath.Join(getConfigPath(), configEmbeddedUsersTestFile)
+	defaultChannelBackend, err := config.FromFile(configPath)()
 	assert.Nil(t, err, "Failed to get backend")
 
 	endpointConfig, err := ConfigFromBackend(defaultChannelBackend...)

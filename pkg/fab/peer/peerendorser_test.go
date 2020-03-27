@@ -22,7 +22,7 @@ import (
 	grpcstatus "google.golang.org/grpc/status"
 
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/fab"
-	pb "github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/protos/peer"
+	pb "github.com/hyperledger/fabric-protos-go/peer"
 
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/errors/status"
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/test/mockfab"
@@ -68,15 +68,6 @@ func TestNewPeerEndorserMutualTLS(t *testing.T) {
 	defer mockCtrl.Finish()
 
 	config := mockfab.DefaultMockConfig(mockCtrl)
-
-	//mutualTLSCerts := apiconfig.MutualTLSConfig{
-	//	Client: struct {
-	//		KeyPem   string
-	//		Keyfile  string
-	//		CertPem  string
-	//		Certfile string
-	//	}{KeyPem: "", Keyfile: "../../../test/fixtures/config/mutual_tls/client_sdk_go-key.pem", CertPem: "", Certfile: "../../../test/fixtures/config/mutual_tls/client_sdk_go.pem"},
-	//}
 
 	url := "grpcs://0.0.0.0:1234"
 	conn, err := newPeerEndorser(getPeerEndorserRequest(url, mockfab.GoodCert, "", config, kap, false, false))

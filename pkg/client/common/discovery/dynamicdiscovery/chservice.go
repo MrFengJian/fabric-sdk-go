@@ -49,6 +49,17 @@ func (s *ChannelService) Close() {
 }
 
 func (s *ChannelService) queryPeers() ([]fab.Peer, error) {
+	peers, err := s.doQueryPeers()
+
+	if err != nil && s.ErrHandler != nil {
+		logger.Infof("[%s] Got error from discovery query: %s. Invoking error handler", s.channelID, err)
+		s.ErrHandler(s.ctx, s.channelID, err)
+	}
+
+	return peers, err
+}
+
+func (s *ChannelService) doQueryPeers() ([]fab.Peer, error) {
 	logger.Debugf("Refreshing peers of channel [%s] from discovery service...", s.channelID)
 
 	ctx := s.context()
@@ -64,7 +75,7 @@ func (s *ChannelService) queryPeers() ([]fab.Peer, error) {
 	reqCtx, cancel := reqContext.NewRequest(ctx, reqContext.WithTimeout(s.responseTimeout))
 	defer cancel()
 
-	req := discclient.NewRequest().OfChannel(s.channelID).AddPeersQuery()
+	req := fabdiscovery.NewRequest().OfChannel(s.channelID).AddPeersQuery()
 	responses, err := s.discoveryClient().Send(reqCtx, req, targets...)
 	if err != nil {
 		if len(responses) == 0 {
@@ -101,8 +112,8 @@ func (s *ChannelService) evaluate(ctx contextAPI.Client, responses []fabdiscover
 	for _, response := range responses {
 		endpoints, err := response.ForChannel(s.channelID).Peers()
 		if err != nil {
-			lastErr = errors.Wrap(err, "error getting peers from discovery response")
-			logger.Warn(lastErr.Error())
+			lastErr = DiscoveryError(err)
+			logger.Warnf("error getting peers from discovery response: %s", lastErr)
 			continue
 		}
 		return s.asPeers(ctx, endpoints), nil

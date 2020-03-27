@@ -12,7 +12,6 @@ package pkcs11
 
 import (
 	"crypto/ecdsa"
-	"crypto/rsa"
 	"crypto/x509"
 	"os"
 
@@ -53,7 +52,7 @@ func New(opts PKCS11Opts, keyStore bccsp.KeyStore) (bccsp.BCCSP, error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "Failed initializing PKCS11 context")
 	}
-	csp := &impl{BCCSP: swCSP, conf: conf, ks: keyStore, softVerify: opts.SoftVerify, pkcs11Ctx: pkcs11Ctx}
+	csp := &impl{BCCSP: swCSP, conf: conf, softVerify: opts.SoftVerify, pkcs11Ctx: pkcs11Ctx}
 	return csp, nil
 }
 
@@ -61,7 +60,6 @@ type impl struct {
 	bccsp.BCCSP
 
 	conf *config
-	ks   bccsp.KeyStore
 
 	pkcs11Ctx  *sdkp11.ContextHandle
 	softVerify bool
@@ -133,10 +131,8 @@ func (csp *impl) KeyImport(raw interface{}, opts bccsp.KeyImportOpts) (k bccsp.K
 		switch pk.(type) {
 		case *ecdsa.PublicKey:
 			return csp.KeyImport(pk, &bccsp.ECDSAGoPublicKeyImportOpts{Temporary: opts.Ephemeral()})
-		case *rsa.PublicKey:
-			return csp.KeyImport(pk, &bccsp.RSAGoPublicKeyImportOpts{Temporary: opts.Ephemeral()})
 		default:
-			return nil, errors.New("Certificate's public key type not recognized. Supported keys: [ECDSA, RSA]")
+			return nil, errors.New("Certificate's public key type not recognized. Supported keys: [ECDSA]")
 		}
 
 	default:
@@ -174,11 +170,11 @@ func (csp *impl) Sign(k bccsp.Key, digest []byte, opts bccsp.SignerOpts) ([]byte
 	}
 
 	// Check key type
-	switch k.(type) {
+	switch key := k.(type) {
 	case *ecdsaPrivateKey:
-		return csp.signECDSA(*k.(*ecdsaPrivateKey), digest, opts)
+		return csp.signECDSA(*key, digest, opts)
 	default:
-		return csp.BCCSP.Sign(k, digest, opts)
+		return csp.BCCSP.Sign(key, digest, opts)
 	}
 }
 
@@ -196,11 +192,11 @@ func (csp *impl) Verify(k bccsp.Key, signature, digest []byte, opts bccsp.Signer
 	}
 
 	// Check key type
-	switch k.(type) {
+	switch key := k.(type) {
 	case *ecdsaPrivateKey:
-		return csp.verifyECDSA(k.(*ecdsaPrivateKey).pub, signature, digest, opts)
+		return csp.verifyECDSA(key.pub, signature, digest, opts)
 	case *ecdsaPublicKey:
-		return csp.verifyECDSA(*k.(*ecdsaPublicKey), signature, digest, opts)
+		return csp.verifyECDSA(*key, signature, digest, opts)
 	default:
 		return csp.BCCSP.Verify(k, signature, digest, opts)
 	}
@@ -233,7 +229,7 @@ func FindPKCS11Lib() (lib, pin, label string) {
 			"/usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so",           //Ubuntu
 			"/usr/lib/s390x-linux-gnu/softhsm/libsofthsm2.so",            //Ubuntu
 			"/usr/lib/powerpc64le-linux-gnu/softhsm/libsofthsm2.so",      //Power
-			"/usr/local/Cellar/softhsm/2.1.0/lib/softhsm/libsofthsm2.so", //MacOS
+			"/usr/local/Cellar/softhsm/2.5.0/lib/softhsm/libsofthsm2.so", //MacOS
 		}
 		for _, path := range possibilities {
 			if _, err := os.Stat(path); !os.IsNotExist(err) {

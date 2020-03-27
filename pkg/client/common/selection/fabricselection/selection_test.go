@@ -1,3 +1,5 @@
+// +build testing
+
 /*
 Copyright SecureKey Technologies Inc. All Rights Reserved.
 
@@ -114,15 +116,25 @@ func TestSelection(t *testing.T) {
 
 	discClient := clientmocks.NewMockDiscoveryClient()
 
-	clientProvider = func(ctx contextAPI.Client) (discoveryClient, error) {
+	SetClientProvider(func(ctx contextAPI.Client) (DiscoveryClient, error) {
 		return discClient, nil
+	})
+
+	var service *Service
+
+	errHandler := func(ctxt fab.ClientContext, channelID string, err error) {
+		derr, ok := err.(DiscoveryError)
+		if ok && derr.Error() == AccessDenied {
+			service.Close()
+		}
 	}
 
 	service, err := New(
 		ctx, channelID,
 		mocks.NewMockDiscoveryService(nil, peer1Org1, peer2Org1, peer1Org2, peer2Org2, peer1Org3, peer2Org3),
-		WithRefreshInterval(100*time.Millisecond),
-		WithResponseTimeout(10*time.Millisecond),
+		WithRefreshInterval(5*time.Millisecond),
+		WithResponseTimeout(100*time.Millisecond),
+		WithErrorHandler(errHandler),
 	)
 	require.NoError(t, err)
 	defer service.Close()
@@ -135,7 +147,7 @@ func TestSelection(t *testing.T) {
 				Error:         fmt.Errorf("simulated response error"),
 			},
 		)
-		testSelectionError(t, service)
+		testSelectionError(t, service, "error getting channel response for channel [testchannel]: simulated response error")
 	})
 
 	t.Run("CCtoCC", func(t *testing.T) {
@@ -149,12 +161,41 @@ func TestSelection(t *testing.T) {
 		)
 
 		// Wait for cache to refresh
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond)
 		testSelectionCCtoCC(t, service)
 	})
 
 	t.Run("Peer Filter", func(t *testing.T) {
-		testSelectionPeerFilter(t, service)
+		endorsers, err := service.GetEndorsersForChaincode([]*fab.ChaincodeCall{{ID: cc1}},
+			options.WithPeerFilter(func(peer fab.Peer) bool {
+				return peer.(fab.PeerState).BlockHeight() > 1001
+			}),
+		)
+
+		assert.NoError(t, err)
+		assert.Equalf(t, 4, len(endorsers), "Expecting 4 endorser")
+
+		// Ensure the endorsers all have a block height > 1001
+		for _, endorser := range endorsers {
+			blockHeight := endorser.(fab.PeerState).BlockHeight()
+			assert.Truef(t, blockHeight > 1001, "Expecting block height to be > 1001")
+		}
+	})
+
+	t.Run("Default Peer Filter", func(t *testing.T) {
+		var prev fab.Peer
+		for i := 0; i < 6; i++ {
+			endorsers, err := service.GetEndorsersForChaincode([]*fab.ChaincodeCall{{ID: cc1}})
+			assert.NoError(t, err)
+			assert.Equalf(t, 6, len(endorsers), "Expecting 6 endorser")
+
+			// Ensure that we get a different endorser as the first peer each time GetEndorsersForChaincode is called in
+			// order to know that the default balancer (round-robin) is working.
+			if prev != nil {
+				require.NotEqual(t, prev, endorsers[0])
+			}
+			prev = endorsers[0]
+		}
 	})
 
 	t.Run("Block Height Sorter Round Robin", func(t *testing.T) {
@@ -168,6 +209,18 @@ func TestSelection(t *testing.T) {
 	t.Run("Priority Selector", func(t *testing.T) {
 		testSelectionPrioritySelector(t, service)
 	})
+
+	t.Run("Fatal Error", func(t *testing.T) {
+		discClient.SetResponses(
+			&clientmocks.MockDiscoverEndpointResponse{
+				PeerEndpoints: []*discmocks.MockDiscoveryPeerEndpoint{},
+				Error:         fmt.Errorf(AccessDenied),
+			},
+		)
+		// Wait for cache to refresh
+		time.Sleep(20 * time.Millisecond)
+		testSelectionError(t, service, "Selection service has been closed")
+	})
 }
 
 func TestWithDiscoveryFilter(t *testing.T) {
@@ -179,9 +232,9 @@ func TestWithDiscoveryFilter(t *testing.T) {
 	ctx.SetEndpointConfig(config)
 
 	discClient := clientmocks.NewMockDiscoveryClient()
-	clientProvider = func(ctx contextAPI.Client) (discoveryClient, error) {
+	SetClientProvider(func(ctx contextAPI.Client) (DiscoveryClient, error) {
 		return discClient, nil
-	}
+	})
 
 	discClient.SetResponses(
 		&clientmocks.MockDiscoverEndpointResponse{
@@ -241,9 +294,10 @@ func TestWithDiscoveryFilter(t *testing.T) {
 	})
 }
 
-func testSelectionError(t *testing.T, service *Service) {
+func testSelectionError(t *testing.T, service *Service, expectedErrMsg string) {
 	endorsers, err := service.GetEndorsersForChaincode([]*fab.ChaincodeCall{{ID: cc1}})
-	assert.Error(t, err)
+	require.Error(t, err)
+	assert.Equal(t, expectedErrMsg, err.Error())
 	assert.Equal(t, 0, len(endorsers))
 }
 
@@ -251,23 +305,6 @@ func testSelectionCCtoCC(t *testing.T, service *Service) {
 	endorsers, err := service.GetEndorsersForChaincode([]*fab.ChaincodeCall{cc1ChaincodeCall, cc2ChaincodeCall})
 	assert.NoError(t, err)
 	assert.Equalf(t, 6, len(endorsers), "Expecting 6 endorser")
-}
-
-func testSelectionPeerFilter(t *testing.T, service *Service) {
-	endorsers, err := service.GetEndorsersForChaincode([]*fab.ChaincodeCall{{ID: cc1}},
-		options.WithPeerFilter(func(peer fab.Peer) bool {
-			return peer.(fab.PeerState).BlockHeight() > 1001
-		}),
-	)
-
-	assert.NoError(t, err)
-	assert.Equalf(t, 4, len(endorsers), "Expecting 4 endorser")
-
-	// Ensure the endorsers all have a block height > 1001
-	for _, endorser := range endorsers {
-		blockHeight := endorser.(fab.PeerState).BlockHeight()
-		assert.Truef(t, blockHeight > 1001, "Expecting block height to be > 1001")
-	}
 }
 
 func testSelectionDistribution(t *testing.T, service *Service, balancer balancer.Balancer, tolerance int) {

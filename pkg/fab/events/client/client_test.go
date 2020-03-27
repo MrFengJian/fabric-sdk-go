@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	cb "github.com/hyperledger/fabric-protos-go/common"
+	pb "github.com/hyperledger/fabric-protos-go/peer"
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/options"
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/context"
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/fab"
@@ -28,8 +30,6 @@ import (
 	fabmocks "github.com/hyperledger/fabric-sdk-go/pkg/fab/mocks"
 	mspmocks "github.com/hyperledger/fabric-sdk-go/pkg/msp/test/mockmsp"
 	"github.com/hyperledger/fabric-sdk-go/pkg/util/test"
-	cb "github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/protos/common"
-	pb "github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/protos/peer"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -645,7 +645,7 @@ func TestReconnect(t *testing.T) {
 		t.Parallel()
 		testConnect(t, 3, mockconn.ConnectedOutcome,
 			mockconn.NewConnectResults(
-				mockconn.NewConnectResult(mockconn.ThirdAttempt, mockconn.SucceedResult),
+				mockconn.NewConnectResult(mockconn.ThirdAttempt, clientmocks.ConnFactory),
 			),
 		)
 	})
@@ -665,10 +665,10 @@ func TestReconnect(t *testing.T) {
 	//     -> should fail to reconnect on the first and second attempt but succeed on the third attempt
 	t.Run("#3", func(t *testing.T) {
 		t.Parallel()
-		testReconnect(t, true, 3, mockconn.ReconnectedOutcome,
+		testReconnect(t, true, 3, mockconn.ReconnectedOutcome, newDisconnectedEvent(),
 			mockconn.NewConnectResults(
-				mockconn.NewConnectResult(mockconn.FirstAttempt, mockconn.SucceedResult),
-				mockconn.NewConnectResult(mockconn.FourthAttempt, mockconn.SucceedResult),
+				mockconn.NewConnectResult(mockconn.FirstAttempt, clientmocks.ConnFactory),
+				mockconn.NewConnectResult(mockconn.FourthAttempt, clientmocks.ConnFactory),
 			),
 		)
 	})
@@ -679,9 +679,9 @@ func TestReconnect(t *testing.T) {
 	//     -> should fail to reconnect after two attempts and then close
 	t.Run("#4", func(t *testing.T) {
 		t.Parallel()
-		testReconnect(t, true, 2, mockconn.ClosedOutcome,
+		testReconnect(t, true, 2, mockconn.ClosedOutcome, newDisconnectedEvent(),
 			mockconn.NewConnectResults(
-				mockconn.NewConnectResult(mockconn.FirstAttempt, mockconn.SucceedResult),
+				mockconn.NewConnectResult(mockconn.FirstAttempt, clientmocks.ConnFactory),
 			),
 		)
 	})
@@ -692,10 +692,49 @@ func TestReconnect(t *testing.T) {
 	//     -> should fail and not attempt to reconnect and then close
 	t.Run("#5", func(t *testing.T) {
 		t.Parallel()
-		testReconnect(t, false, 0, mockconn.ClosedOutcome,
+		testReconnect(t, false, 0, mockconn.ClosedOutcome, newDisconnectedEvent(),
 			mockconn.NewConnectResults(
-				mockconn.NewConnectResult(mockconn.FirstAttempt, mockconn.SucceedResult),
+				mockconn.NewConnectResult(mockconn.FirstAttempt, clientmocks.ConnFactory),
 			),
+		)
+	})
+
+	// (1) Connect
+	//     -> should succeed to connect on the first attempt
+	// (2) Disconnect with fatal error
+	//     -> should fail and not attempt to reconnect and then close
+	t.Run("#6", func(t *testing.T) {
+		t.Parallel()
+		testReconnect(t, true, 0, mockconn.ClosedOutcome, newFatalDisconnectedEvent(),
+			mockconn.NewConnectResults(
+				mockconn.NewConnectResult(mockconn.FirstAttempt, clientmocks.ConnFactory),
+			),
+		)
+	})
+
+	// (1) Connect
+	//     -> should succeed to connect on the first attempt
+	// (2) Disconnect with non-fatal error
+	//     -> will keep failing to reconnect and will retry forever
+	// (3) After waiting a while, close the client
+	//     -> the client should stop trying to reconnect and the client should close
+	t.Run("#7", func(t *testing.T) {
+		t.Parallel()
+
+		closeCalled := false
+		testReconnect(t, true, 0, mockconn.ClosedOutcome, newDisconnectedEvent(),
+			mockconn.NewConnectResults(
+				mockconn.NewConnectResult(mockconn.FirstAttempt, clientmocks.ConnFactory),
+			),
+			withTimeoutAction(func(c *Client) (outcome mockconn.Outcome, b bool) {
+				if closeCalled {
+					return mockconn.TimedOutOutcome, true
+				}
+
+				c.Close()
+				closeCalled = true
+				return "", false
+			}),
 		)
 	})
 }
@@ -720,8 +759,8 @@ func TestReconnectRegistration(t *testing.T) {
 		testReconnectRegistration(
 			t, mockconn.ExpectFiveBlocks, mockconn.ExpectThreeCC,
 			mockconn.NewConnectResults(
-				mockconn.NewConnectResult(mockconn.FirstAttempt, mockconn.SucceedResult),
-				mockconn.NewConnectResult(mockconn.SecondAttempt, mockconn.SucceedResult)),
+				mockconn.NewConnectResult(mockconn.FirstAttempt, clientmocks.ConnFactory),
+				mockconn.NewConnectResult(mockconn.SecondAttempt, clientmocks.ConnFactory)),
 		)
 	})
 }
@@ -1051,7 +1090,33 @@ func testConnect(t *testing.T, maxConnectAttempts uint, expectedOutcome mockconn
 	}
 }
 
-func testReconnect(t *testing.T, reconnect bool, maxReconnectAttempts uint, expectedOutcome mockconn.Outcome, connAttemptResult mockconn.ConnectAttemptResults) {
+type timeoutAction = func(c *Client) (mockconn.Outcome, bool)
+
+type reconnectOptions struct {
+	timeoutAction timeoutAction
+}
+
+type reconnectOpt func(o *reconnectOptions)
+
+func withTimeoutAction(a timeoutAction) reconnectOpt {
+	return func(o *reconnectOptions) {
+		o.timeoutAction = a
+	}
+}
+
+func testReconnect(t *testing.T, reconnect bool,
+	maxReconnectAttempts uint, expectedOutcome mockconn.Outcome, event esdispatcher.Event,
+	connAttemptResult mockconn.ConnectAttemptResults, opts ...reconnectOpt) {
+
+	reconOpts := &reconnectOptions{}
+	reconOpts.timeoutAction = func(c *Client) (outcome mockconn.Outcome, b bool) {
+		return mockconn.TimedOutOutcome, true
+	}
+
+	for _, opt := range opts {
+		opt(reconOpts)
+	}
+
 	cp := mockconn.NewProviderFactory()
 
 	connectch := make(chan *dispatcher.ConnectionEvent)
@@ -1089,14 +1154,18 @@ func testReconnect(t *testing.T, reconnect bool, maxReconnectAttempts uint, expe
 	go listenConnection(connectch, outcomech)
 
 	// Test automatic reconnect handling
-	cp.Connection().ProduceEvent(dispatcher.NewDisconnectedEvent(errors.New("testing reconnect handling")))
+	cp.Connection().ProduceEvent(event)
 
 	var outcome mockconn.Outcome
 
-	select {
-	case outcome = <-outcomech:
-	case <-time.After(5 * time.Second):
-		outcome = mockconn.TimedOutOutcome
+	stop := false
+	for !stop {
+		select {
+		case outcome = <-outcomech:
+			stop = true
+		case <-time.After(5 * time.Second):
+			outcome, stop = reconOpts.timeoutAction(eventClient)
+		}
 	}
 
 	if outcome != expectedOutcome {
@@ -1707,4 +1776,12 @@ func testTransferRegistrations(t *testing.T, transferFunc transferFunc) {
 	}
 
 	eventClient2.Unregister(breg)
+}
+
+func newDisconnectedEvent() esdispatcher.Event {
+	return dispatcher.NewDisconnectedEvent(errors.New("testing reconnect handling"))
+}
+
+func newFatalDisconnectedEvent() esdispatcher.Event {
+	return dispatcher.NewFatalDisconnectedEvent(errors.New("testing reconnect handling"))
 }
