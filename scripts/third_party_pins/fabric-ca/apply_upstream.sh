@@ -11,8 +11,8 @@
 
 set -e
 
-UPSTREAM_PROJECT="github.com/MrFengJian/fabric-ca"
-UPSTREAM_BRANCH="${UPSTREAM_BRANCH:fjj_sm}"
+UPSTREAM_PROJECT="github.com/hyperledger/fabric-ca"
+UPSTREAM_BRANCH="${UPSTREAM_BRANCH:-release}"
 SCRIPTS_PATH="scripts/third_party_pins/fabric-ca"
 PATCHES_PATH="scripts/third_party_pins/fabric-ca/patches"
 
@@ -30,7 +30,10 @@ TMP_PROJECT_PATH=$TMP/src/$UPSTREAM_PROJECT
 mkdir -p $TMP_PROJECT_PATH
 cd ${TMP_PROJECT_PATH}/..
 
-git clone https://${UPSTREAM_PROJECT}.git
+
+# TODO: 修改为从gopath下直接复制，网络情况好的情况下，可以clone
+cp -r "${GOPATH}"/src/github.com/hyperledger/fabric-ca "${PWD}"
+#git clone https://${UPSTREAM_PROJECT}.git
 cd $TMP_PROJECT_PATH
 git checkout $UPSTREAM_BRANCH
 git reset --hard $UPSTREAM_COMMIT

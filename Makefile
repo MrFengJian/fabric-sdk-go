@@ -67,10 +67,10 @@ FABRIC_DEV_REGISTRY         ?= nexus3.hyperledger.org:10001
 FABRIC_DEV_REGISTRY_PRE_CMD ?= docker login -u docker -p docker nexus3.hyperledger.org:10001
 
 # Upstream fabric patching (overridable)
-THIRDPARTY_FABRIC_CA_BRANCH ?= master
-THIRDPARTY_FABRIC_CA_COMMIT ?= v1.3.0
-THIRDPARTY_FABRIC_BRANCH    ?= master
-THIRDPARTY_FABRIC_COMMIT    ?= v1.3.0
+THIRDPARTY_FABRIC_CA_BRANCH ?= fjj_sm
+THIRDPARTY_FABRIC_CA_COMMIT ?= fjj_sm
+THIRDPARTY_FABRIC_BRANCH    ?= fjj_sm
+THIRDPARTY_FABRIC_COMMIT    ?= fjj_sm
 
 # Force removal of images in cleanup (overridable)
 FIXTURE_DOCKER_REMOVE_FORCE ?= false
